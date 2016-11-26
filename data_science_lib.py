@@ -45,7 +45,7 @@ def train_model(X,y,
     """
     
     # Set classifiers
-    classifiers = ['knn','logistic_regression']
+    classifiers = ['knn','logistic_regression','svm']
     
     # Set regressors
     regressors = []
@@ -72,6 +72,8 @@ def train_model(X,y,
             pipeline_steps.append(('estimator', KNeighborsClassifier()))
         elif estimator == 'logistic_regression':
             pipeline_steps.append(('estimator', LogisticRegression()))
+        elif estimator == 'svm':
+            pipeline_steps.append(('estimator', SVC()))
     else:
         error = 'Estimator %s is not recognized. Currently supported estimators are:\n'%(estimator)
 
