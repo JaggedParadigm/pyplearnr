@@ -50,7 +50,7 @@ def train_model(X,y,
     """
     
     # Set classifiers
-    classifiers = ['knn','logistic_regression','svm']
+    classifiers = ['knn','logistic_regression','svm','multilayer_perceptron']
     
     # Set regressors
     regressors = ['polynomial_regression']
@@ -90,6 +90,8 @@ def train_model(X,y,
         elif estimator == 'polynomial_regression':
             pipeline_steps.append(('pre_estimator',PolynomialFeatures()))
             pipeline_steps.append(('estimator', LinearRegression()))
+        elif estimator == 'multilayer_perceptron':
+            pipeline_steps.append(('estimator', MLPClassifier(solver='lbfgs',alpha=1e-5)))
     else:
         error = 'Estimator %s is not recognized. Currently supported estimators are:\n'%(estimator)
 
@@ -120,6 +122,9 @@ def train_model(X,y,
         elif estimator == 'polynomial_regression':
             if 'pre_estimator__degree' not in param_dist:
                 param_dist['pre_estimator__degree'] = range(1,5)
+        elif estimator == 'multilayer_perceptron':
+            if 'estimator__hidden_layer_sizes' not in param_dist: 
+                param_dist['estimator__hidden_layer_sizes'] = [[x] for x in range(min(3,len(X.columns)),max(3,len(X.columns))+1)]
 
     # Form pipeline
     pipeline = Pipeline(pipeline_steps)
