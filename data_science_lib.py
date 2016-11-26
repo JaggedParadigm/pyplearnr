@@ -34,7 +34,7 @@ def train_model(X,y,
                feature_selection_type='select_k_best',
                estimator='knn',
                param_dist={},
-               use_default_param_dist=True,
+               use_default_param_dist=False,
                n_jobs=-1,
                num_parameter_combos=[],
                cv=10):
