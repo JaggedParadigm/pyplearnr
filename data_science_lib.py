@@ -10,6 +10,10 @@ from sklearn.preprocessing import Binarizer
 # Feature selection tools
 from sklearn.feature_selection import SelectKBest, f_classif
 
+# Unsupervised learning tools
+from sklearn.decomposition import PCA
+from sklearn.lda import LDA
+
 # Classifiers
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.neighbors import KNeighborsClassifier
@@ -34,7 +38,8 @@ from sklearn.metrics import classification_report
 
 def train_model(X,y,
                scale_type=None,
-               feature_selection_type='select_k_best',
+               transform_type=None,
+               feature_selection_type=None,
                estimator='knn',
                param_dist={},
                use_default_param_dist=False,
@@ -48,10 +53,13 @@ def train_model(X,y,
     classifiers = ['knn','logistic_regression','svm']
     
     # Set regressors
-    regressors = []
+    regressors = ['polynomial_regression']
     
     # Set estimator options
     estimator_options = classifiers + regressors
+    
+    # Set transformers
+    transformers = ['pca']
 
     # Initialize pipeline steps
     pipeline_steps = []
@@ -61,6 +69,11 @@ def train_model(X,y,
         if scale_type == 'standard':
             pipeline_steps.append(('scaler', StandardScaler()))
             
+    # Add transforming step
+    if transform_type:
+        if transform_type == 'pca':
+            pipeline_steps.append(('transform', PCA()))
+
     # Add feature selection step
     if feature_selection_type:
         if feature_selection_type == 'select_k_best':
@@ -74,6 +87,9 @@ def train_model(X,y,
             pipeline_steps.append(('estimator', LogisticRegression()))
         elif estimator == 'svm':
             pipeline_steps.append(('estimator', SVC()))
+        elif estimator == 'polynomial_regression':
+            pipeline_steps.append(('pre_estimator',PolynomialFeatures()))
+            pipeline_steps.append(('estimator', LinearRegression()))
     else:
         error = 'Estimator %s is not recognized. Currently supported estimators are:\n'%(estimator)
 
@@ -101,6 +117,9 @@ def train_model(X,y,
         elif estimator == 'logistic_regression':
             if 'estimator__C' not in param_dist:
                 param_dist['estimator__C'] = np.logspace(-10,10,5)
+        elif estimator == 'polynomial_regression':
+            if 'pre_estimator__degree' not in param_dist:
+                param_dist['pre_estimator__degree'] = range(1,5)
 
     # Form pipeline
     pipeline = Pipeline(pipeline_steps)
