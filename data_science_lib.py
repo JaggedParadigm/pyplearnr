@@ -1,3 +1,6 @@
+# Basic tools
+import numpy as np
+
 # Scalers
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import MinMaxScaler
@@ -41,15 +44,15 @@ def train_model(X,y,
     """
     """
     
-    # Set estimator options
-    estimator_options = ['knn']
-    
     # Set classifiers
-    classifiers = ['knn']
+    classifiers = ['knn','logistic_regression']
     
     # Set regressors
     regressors = []
     
+    # Set estimator options
+    estimator_options = classifiers + regressors
+
     # Initialize pipeline steps
     pipeline_steps = []
     
@@ -67,6 +70,8 @@ def train_model(X,y,
     if estimator in estimator_options:
         if estimator == 'knn':
             pipeline_steps.append(('estimator', KNeighborsClassifier()))
+        elif estimator == 'logistic_regression':
+            pipeline_steps.append(('estimator', LogisticRegression()))
     else:
         error = 'Estimator %s is not recognized. Currently supported estimators are:\n'%(estimator)
 
@@ -91,6 +96,9 @@ def train_model(X,y,
             # Add default point metric options for for k-nearest neighbors
             if 'estimator__weights' not in param_dist:
                 param_dist['estimator__weights'] = ['uniform','distance']
+        elif estimator == 'logistic_regression':
+            if 'estimator__C' not in param_dist:
+                param_dist['estimator__C'] = np.logspace(-10,10,5)
 
     # Form pipeline
     pipeline = Pipeline(pipeline_steps)
@@ -100,6 +108,11 @@ def train_model(X,y,
         scoring = 'accuracy'
     elif estimator in regressors:
         scoring = 'neg_mean_squared_error'
+        
+    # Print grid parameters
+    print 'Grid parameters:'
+    for x in param_dist:
+        print x,':',param_dist[x]
     
     # Initialize full or randomized grid search
     if num_parameter_combos:
