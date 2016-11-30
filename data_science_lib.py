@@ -40,6 +40,7 @@ from sklearn.metrics import classification_report
 
 def train_model(X,y,
                scale_type=None,
+               feature_interactions=False,
                transform_type=None,
                feature_selection_type=None,
                estimator='knn',
@@ -88,6 +89,10 @@ def train_model(X,y,
         if scale_type == 'standard':
             pipeline_steps.append(('scaler', StandardScaler()))
             
+    # Add feature interactions
+    if feature_interactions:
+        pipeline_steps.append(('feature_interactions',PolynomialFeatures()))
+        
     # Add transforming step
     if transform_type:
         if transform_type == 'pca':
@@ -125,6 +130,11 @@ def train_model(X,y,
 
     # Add default scaling step to grid parameters
     if use_default_param_dist:
+        # Add default feature interaction parameters
+        if feature_interactions:
+            if 'feature_interactions__degree' not in param_dist:
+                param_dist['feature_interactions__degree'] = range(1,3)
+                    
         # Add default feature selection parameters
         if feature_selection_type:
             if feature_selection_type == 'select_k_best' and 'feature_selection__k' not in param_dist:
