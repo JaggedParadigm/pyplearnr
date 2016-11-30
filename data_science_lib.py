@@ -1,5 +1,6 @@
 # Basic tools
 import numpy as np
+import pandas as pd
 
 # Scalers
 from sklearn.preprocessing import StandardScaler
@@ -13,6 +14,7 @@ from sklearn.feature_selection import SelectKBest, f_classif
 # Unsupervised learning tools
 from sklearn.decomposition import PCA
 from sklearn.lda import LDA
+from sklearn.manifold import TSNE
 
 # Classifiers
 from sklearn.naive_bayes import MultinomialNB
@@ -48,7 +50,24 @@ def train_model(X,y,
                cv=10):
     """
     """
+    # Convert X and y to ndarray if either Pandas series or dataframe
+    if type(X) is not np.ndarray:
+        if type(X) is pd.core.frame.DataFrame or type(X) is pd.core.series.Series:
+            X = X.values
+        else:
+            raise Exception('Data input, X, must be of type pandas.core.frame.DataFrame, \
+                            pandas.core.series.Series, or numpy.ndarray')
     
+    if type(y) is not np.ndarray:        
+        if type(y) is pd.core.frame.DataFrame or type(y) is pd.core.series.Series:
+            y = y.values
+        else:
+            raise Exception('Data output, y, must be of type pandas.core.frame.DataFrame, \
+                            pandas.core.series.Series, or numpy.ndarray')
+        
+    # Get number of features
+    num_features = X.shape[1]
+        
     # Set classifiers
     classifiers = ['knn','logistic_regression','svm','multilayer_perceptron','random_forest']
     
@@ -59,7 +78,7 @@ def train_model(X,y,
     estimator_options = classifiers + regressors
     
     # Set transformers
-    transformers = ['pca']
+    transformers = ['pca','t-sne']
 
     # Initialize pipeline steps
     pipeline_steps = []
@@ -73,7 +92,9 @@ def train_model(X,y,
     if transform_type:
         if transform_type == 'pca':
             pipeline_steps.append(('transform', PCA()))
-
+        elif transform_type == 't-sne':
+            pipeline_steps.append(('transform', TSNE(n_components=2, init='pca')))
+                
     # Add feature selection step
     if feature_selection_type:
         if feature_selection_type == 'select_k_best':
@@ -107,7 +128,7 @@ def train_model(X,y,
         # Add default feature selection parameters
         if feature_selection_type:
             if feature_selection_type == 'select_k_best' and 'feature_selection__k' not in param_dist:
-                param_dist['feature_selection__k'] = range(1,len(X.columns)+1)
+                param_dist['feature_selection__k'] = range(1,num_features+1)
         
         # Add default estimator parameters
         if estimator == 'knn':
@@ -126,7 +147,7 @@ def train_model(X,y,
                 param_dist['pre_estimator__degree'] = range(1,5)
         elif estimator == 'multilayer_perceptron':
             if 'estimator__hidden_layer_sizes' not in param_dist: 
-                param_dist['estimator__hidden_layer_sizes'] = [[x] for x in range(min(3,len(X.columns)),max(3,len(X.columns))+1)]
+                param_dist['estimator__hidden_layer_sizes'] = [[x] for x in range(min(3,num_features),max(3,num_features)+1)]
         elif estimator == 'random_forest':
             if 'estimator__n_estimators' not in param_dist:
                 param_dist['estimator__n_estimators'] = range(90,100)
