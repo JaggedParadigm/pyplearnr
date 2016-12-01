@@ -140,9 +140,6 @@ def train_model(X,y,
             if feature_selection_type == 'select_k_best' and 'feature_selection__k' not in param_dist:
                 if not feature_interactions:
                     param_dist['feature_selection__k'] = range(1,num_features+1)
-                else:
-                    print num_features
-                    param_dist['feature_selection__k'] = range(1,num_features+1)
         
         # Add default estimator parameters
         if estimator == 'knn':
