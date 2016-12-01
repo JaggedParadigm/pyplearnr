@@ -38,6 +38,11 @@ from sklearn.grid_search import RandomizedSearchCV
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import classification_report
 
+# Define custom TSNE class so that it will work with pipeline
+class pipeline_TSNE(TSNE):
+    def transform(self,X):
+        return self.fit_transform(X)
+
 def train_model(X,y,
                scale_type=None,
                feature_interactions=False,
@@ -83,6 +88,11 @@ def train_model(X,y,
 
     # Initialize pipeline steps
     pipeline_steps = []
+
+    # Add feature selection step
+    if feature_selection_type:
+        if feature_selection_type == 'select_k_best':
+            pipeline_steps.append(('feature_selection', SelectKBest(f_classif)))
     
     # Add scaling step
     if scale_type:
@@ -97,14 +107,10 @@ def train_model(X,y,
     if transform_type:
         if transform_type == 'pca':
             pipeline_steps.append(('transform', PCA()))
-        elif transform_type == 't-sne':
-            pipeline_steps.append(('transform', TSNE(n_components=2, init='pca')))
-                
-    # Add feature selection step
-    if feature_selection_type:
-        if feature_selection_type == 'select_k_best':
-            pipeline_steps.append(('feature_selection', SelectKBest(f_classif)))
-            
+        elif transform_type == 't-sne':            
+            pipeline_steps.append(('transform', pipeline_TSNE(n_components=2, init='pca')))
+            #pipeline_steps.append(('transform', TSNE(n_components=2, init='pca')))
+                            
     # Add estimator
     if estimator in estimator_options:
         if estimator == 'knn':
