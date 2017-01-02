@@ -43,7 +43,7 @@ from sklearn.metrics import classification_report
 class pipeline_TSNE(TSNE):
     def transform(self,X):
         return self.fit_transform(X)
-
+    
 def train_model(X,y,
                scale_type=None,
                feature_interactions=False,
@@ -55,7 +55,8 @@ def train_model(X,y,
                n_jobs=-1,
                num_parameter_combos=[],
                cv=10,
-               random_state=[]):
+               random_state=[],
+               suppress_output=False):
     """
     """
     # Convert X and y to ndarray if either Pandas series or dataframe
@@ -176,6 +177,15 @@ def train_model(X,y,
     # Form pipeline
     pipeline = Pipeline(pipeline_steps)
     
+    # Initialize extra fields
+    pipeline.score_type = [] # "classification" or "regression" score
+    pipeline.train_score = [] # Score from training set
+    pipeline.test_score = [] # Score from test set        
+    pipeline.confusion_matrix = [] # Confusion matrix, if classification
+    pipeline.normalized_confusion_matrix = [] # Confusion matrix divided by its total sum
+    pipeline.classification_report = [] # Classification report
+    pipeline.best_parameters = [] # Best parameters            
+    
     # Set scoring
     if estimator in classifiers:
         scoring = 'accuracy'
@@ -183,9 +193,10 @@ def train_model(X,y,
         scoring = 'neg_mean_squared_error'
         
     # Print grid parameters
-    print 'Grid parameters:'
-    for x in param_dist:
-        print x,':',param_dist[x]
+    if not suppress_output:
+        print('Grid parameters:')
+        for x in param_dist:
+            print(x,':',param_dist[x])
     
     # Initialize full or randomized grid search
     if num_parameter_combos:
@@ -201,43 +212,73 @@ def train_model(X,y,
     
     # Split data into train and test sets
     X_train, X_test, y_train, y_test = \
-        train_test_split(X, y, test_size=0.2,random_state=random_state)
-
+        train_test_split(X,y,test_size=0.2,random_state=random_state)
+    
     # Perform grid search using above parameters
     grid_search.fit(X_train,y_train)
-
+    
     # Make prediction based on model
     y_pred = grid_search.best_estimator_.predict(X_test)
 
     # Print scores
     if estimator in classifiers:
         # Calculate confusion matrix
-        conf_mat = confusion_matrix(y_test, y_pred)
-
-        # Print training and test scores
-        print '\nTraining set classification accuracy: ',grid_search.best_score_
-        print '\nTest set classification accuracy: ',conf_mat.trace()/float(conf_mat.sum())
+        pipeline.confusion_matrix = confusion_matrix(y_test, y_pred)
         
-        # Print out confusion matrix and normalized confusion matrix containing probabilities
-        print 'Confusion matrix: \n\n',conf_mat
-        print '\nNormalized confusion matrix: \n\n',conf_mat/float(conf_mat.sum())
-
-        # Print out classification report
-        print '\nClassification report: \n\n',classification_report(y_test, y_pred)        
+        # Save estimator type
+        pipeline.score_type = 'classification'
+        
+        # Get and save training score
+        pipeline.train_score = grid_search.best_score_
+        
+        # Get and save test score
+        pipeline.test_score = pipeline.confusion_matrix.trace()/float(pipeline.confusion_matrix.sum())
+        
+        # Calculate and save normalized confusion matrix
+        pipeline.normalized_confusion_matrix = pipeline.confusion_matrix/float(pipeline.confusion_matrix.sum())
+        
+        # Save classification report
+        pipeline.classification_report = classification_report(y_test, y_pred)        
+        
+        # Print output if desired
+        if not suppress_output:
+            # Print training and test scores
+            print('\nTraining set classification accuracy: ', pipeline.train_score)
+            print('\nTest set classification accuracy: ', pipeline.test_score)
+            
+            # Print out confusion matrix and normalized confusion matrix containing probabilities
+            print('Confusion matrix: \n\n',pipeline.confusion_matrix)
+            print('\nNormalized confusion matrix: \n\n', pipeline.normalized_confusion_matrix)
+    
+            # Print out classification report
+            print('\nClassification report: \n\n',pipeline.classification_report)
     elif estimator in regressors:
-        print '\nTraining L2 norm score: ',-grid_search.best_score_
-        print '\nTest L2 norm score: ',np.sqrt(np.square(y_test-y_pred).sum(axis=0))
+        # Save estimator type
+        pipeline.score_type = 'regression'
+        
+        # Calculate and save training and test scores
+        pipeline.train_score = -grid_search.best_score_
+        pipeline.test_score = np.sqrt(np.square(y_test-y_pred).sum(axis=0))
+        
+        # Print output if desired
+        if not suppress_output:
+            print('\nTraining L2 norm score: ',pipeline.train_score)
+            print('\nTest L2 norm score: ',pipeline.test_score)
+    
+    # Save best parameters
+    pipeline.best_parameters = grid_search.best_params_
     
     # Print best parameters
-    print '\nBest parameters:\n'
-    print grid_search.best_params_
+    if not suppress_output:
+        print('\nBest parameters:\n')
+        print(pipeline.best_parameters)
 
     # Fit pipeline with best parameters obtained from grid search using all data
     pipeline.set_params(**grid_search.best_params_).fit(X, y)
 
     # Print pipeline
-    print '\n',pipeline
+    if not suppress_output:
+        print('\n',pipeline)
     
     # Return pipeline
     return pipeline # Use pipeline.predict() for productionalization
-        
