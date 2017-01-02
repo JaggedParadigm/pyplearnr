@@ -23,6 +23,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC, LinearSVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import AdaBoostClassifier
 
 # Regression tools
 from sklearn.preprocessing import PolynomialFeatures
@@ -53,7 +54,8 @@ def train_model(X,y,
                use_default_param_dist=False,
                n_jobs=-1,
                num_parameter_combos=[],
-               cv=10):
+               cv=10,
+               random_state=[]):
     """
     """
     # Convert X and y to ndarray if either Pandas series or dataframe
@@ -75,7 +77,7 @@ def train_model(X,y,
     num_features = X.shape[1]
         
     # Set classifiers
-    classifiers = ['knn','logistic_regression','svm','multilayer_perceptron','random_forest']
+    classifiers = ['knn','logistic_regression','svm','multilayer_perceptron','random_forest','adaboost']
     
     # Set regressors
     regressors = ['polynomial_regression']
@@ -120,12 +122,14 @@ def train_model(X,y,
         elif estimator == 'svm':
             pipeline_steps.append(('estimator', SVC()))
         elif estimator == 'polynomial_regression':
-            pipeline_steps.append(('pre_estimator',PolynomialFeatures()))
+            pipeline_steps.append(('pre_estimator', PolynomialFeatures()))
             pipeline_steps.append(('estimator', LinearRegression()))
         elif estimator == 'multilayer_perceptron':
             pipeline_steps.append(('estimator', MLPClassifier(solver='lbfgs',alpha=1e-5)))
         elif estimator == 'random_forest':
             pipeline_steps.append(('estimator', RandomForestClassifier()))
+        elif estimator == 'adaboost':
+            pipeline_steps.append(('estimator', AdaBoostClassifier())) #AdaBoostClassifier(n_estimators=100)                        
     else:
         error = 'Estimator %s is not recognized. Currently supported estimators are:\n'%(estimator)
 
@@ -197,7 +201,7 @@ def train_model(X,y,
     
     # Split data into train and test sets
     X_train, X_test, y_train, y_test = \
-        train_test_split(X, y, test_size=0.2)
+        train_test_split(X, y, test_size=0.2,random_state=random_state)
 
     # Perform grid search using above parameters
     grid_search.fit(X_train,y_train)
