@@ -1,3 +1,6 @@
+# Make compatible with Python 3
+from __future__ import print_function
+
 # Basic tools
 import numpy as np
 import pandas as pd
