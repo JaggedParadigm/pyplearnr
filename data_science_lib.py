@@ -53,7 +53,7 @@ def train_model(X,y,
                transform_type=None,
                feature_selection_type=None,
                estimator='knn',
-               param_dist={},
+               param_dist=None,
                use_default_param_dist=False,
                n_jobs=-1,
                num_parameter_combos=[],
@@ -62,6 +62,10 @@ def train_model(X,y,
                suppress_output=False):
     """
     """
+    # Set param_dist to empty dictionary if not given
+    if not param_dist:
+        param_dist = {}
+    
     # Convert X and y to ndarray if either Pandas series or dataframe
     if type(X) is not np.ndarray:
         if type(X) is pd.core.frame.DataFrame or type(X) is pd.core.series.Series:
