@@ -46,7 +46,348 @@ from sklearn.metrics import classification_report
 class pipeline_TSNE(TSNE):
     def transform(self,X):
         return self.fit_transform(X)
+
+class OptimizedPipeline:
+    """
+    Pipeline with optimal parameters found through nested k-folds cross validation
+    """
+    def __init__(self,estimator,
+                 feature_selection_type=None,
+                 scale_type=None,
+                 feature_interactions=False,
+                 transform_type=None):
+        
+        # Initialize fields
+        self.X = None # feature inputs
+        self.y = None # target values
+        
+        self.X_train = None
+        self.y_train = None
+        
+        self.X_test = None
+        self.y_test = None
+        
+        self.scale_type = scale_type # Type of scaling, if any
+        
+        self.transform_type = transform_type # Type of transformation, if any
+        
+        self.feature_interactions = feature_interactions # Whether feature interactions are used
+        
+        self.feature_selection_type=feature_selection_type # Type of feature selection
+        
+        self.estimator=estimator # Estimator
+        
+        self.param_dist=None # Parameters to be gridded over
+        
+        self.cv = None # k, in k-folds cross validation
+        self.num_parameter_combos = None # Number of parameter combos to use (for RandomSearchCV)
+        
+        # Form pipeline
+        self.pipeline = self.construct_pipeline(self.estimator,
+                                                feature_selection_type=self.feature_selection_type,
+                                                scale_type=self.scale_type,
+                                                transform_type=self.transform_type,
+                                                feature_interactions=self.feature_interactions)
+        
+        print(self.pipeline)
+        
+        # Initialize optimized pipeline parameters
+        self.score_type_ = None # "classification" or "regression" score
+        self.train_score_ = None # Score from training set
+        self.test_score_ = None # Score from test set        
+        self.confusion_matrix_ = None # Confusion matrix, if classification
+        self.normalized_confusion_matrix_ = None # Confusion matrix divided by its total sum
+        self.classification_report_ = None # Classification report
+        self.best_parameters_ = None # Best parameters            
+        
+    def construct_pipeline(self,estimator,
+                           feature_selection_type=None,
+                           scale_type=None,
+                           transform_type=None,
+                           feature_interactions=False):
+        """
+        """
+        # Set supported transformers, classifiers, and regressors 
+        transformers = ['pca','t-sne']
+        
+        classifiers = ['knn','logistic_regression','svm','multilayer_perceptron','random_forest','adaboost']
+        
+        regressors = ['polynomial_regression']
+        
+        estimator_options = classifiers + regressors
+        
+        # Initialize pipeline steps
+        pipeline_steps = []
     
+        # Add feature selection step
+        if feature_selection_type:
+            if feature_selection_type == 'select_k_best':
+                pipeline_steps.append(('feature_selection', SelectKBest(f_classif)))
+        
+        # Add scaling step
+        if scale_type:
+            if scale_type == 'standard':
+                pipeline_steps.append(('scaler', StandardScaler()))
+                
+        # Add feature interactions
+        if feature_interactions:
+            pipeline_steps.append(('feature_interactions',PolynomialFeatures()))
+            
+        # Add transforming step
+        if transform_type:
+            if transform_type == 'pca':
+                pipeline_steps.append(('transform', PCA()))
+            elif transform_type == 't-sne':            
+                pipeline_steps.append(('transform', pipeline_TSNE(n_components=2, init='pca')))
+        
+        # Add estimator
+        if estimator in estimator_options:
+            if estimator == 'knn':
+                pipeline_steps.append(('estimator', KNeighborsClassifier()))
+            elif estimator == 'logistic_regression':
+                pipeline_steps.append(('estimator', LogisticRegression()))
+            elif estimator == 'svm':
+                pipeline_steps.append(('estimator', SVC()))
+            elif estimator == 'polynomial_regression':
+                pipeline_steps.append(('pre_estimator', PolynomialFeatures()))
+                pipeline_steps.append(('estimator', LinearRegression()))
+            elif estimator == 'multilayer_perceptron':
+                pipeline_steps.append(('estimator', MLPClassifier(solver='lbfgs',alpha=1e-5)))
+            elif estimator == 'random_forest':
+                pipeline_steps.append(('estimator', RandomForestClassifier()))
+            elif estimator == 'adaboost':
+                pipeline_steps.append(('estimator', AdaBoostClassifier())) #AdaBoostClassifier(n_estimators=100)                        
+        else:
+            error = 'Estimator %s is not recognized. Currently supported estimators are:\n'%(estimator)
+    
+            for option in estimator_options:
+                error += '\n%s'%(option)
+    
+            raise Exception(error)
+        
+        # Form/return pipeline
+        return Pipeline(pipeline_steps)
+
+    def fit(self,X,y,
+            cv=10,
+            num_parameter_combos=None,
+            n_jobs=-1,
+            random_state=None,
+            suppress_output=False,
+            use_default_param_dist=True,
+            param_dist=None):
+        """
+        Uses the optimize_pipeline method to optimize object pipeline through nested k-folds cross validation
+        """
+        # Convert X and y to ndarray if either Pandas series or dataframe
+        if type(X) is not np.ndarray:
+            if type(X) is pd.core.frame.DataFrame or type(X) is pd.core.series.Series:
+                X = X.values
+            else:
+                raise Exception('Data input, X, must be of type pandas.core.frame.DataFrame, \
+                                pandas.core.series.Series, or numpy.ndarray')
+        
+        if type(y) is not np.ndarray:        
+            if type(y) is pd.core.frame.DataFrame or type(y) is pd.core.series.Series:
+                y = y.values
+            else:
+                raise Exception('Data output, y, must be of type pandas.core.frame.DataFrame, \
+                                pandas.core.series.Series, or numpy.ndarray')
+        
+        # Save data
+        self.X = X.copy()
+        self.y = y.copy()
+        
+        # Save cross-validation settings
+        self.cv = cv
+        self.num_parameter_combos = num_parameter_combos
+        
+        
+        """
+        models['knn'] = dsl.train_model(X,y,
+                                use_default_param_dist=True,
+                                random_state=6,
+                                suppress_output=False, # Can suppress print outs if desired
+                                estimator='knn',) 
+        """
+        
+        ## Fit pipeline using nest k-folds cross validation
+        #self.pipeline = self.optimize_pipeline(self.X,self.y,
+        #                                       use_default_param_dist=True,)
+        
+
+           
+        
+    def optimize_pipeline(self,X,y,
+            param_dist=None,
+            use_default_param_dist=False,
+            cv=10,
+            n_jobs=-1,
+            num_parameter_combos=None,
+            random_state=None,
+            suppress_output=False):
+        """
+        Fits data to the pipeline given the settings from the initialization
+        """
+        
+        # Check input types
+        assert type(X) is np.array,'Input feature values, X, must be of type ndarray'
+        assert type(y) is np.array,'Input feature values, y, must be of type ndarray'
+        
+        
+        
+        # Set param_dist to empty dictionary if not given
+        if not param_dist:
+            param_dist = {}
+        
+            
+        # Get number of features
+        num_features = X.shape[1]
+            
+    
+
+    
+        # Add default scaling step to grid parameters
+        if use_default_param_dist:
+            # Add default feature interaction parameters
+            if feature_interactions:
+                if 'feature_interactions__degree' not in param_dist:
+                    param_dist['feature_interactions__degree'] = range(1,3)
+                        
+            # Add default feature selection parameters
+            if feature_selection_type:
+                if feature_selection_type == 'select_k_best' and 'feature_selection__k' not in param_dist:
+                    if not feature_interactions:
+                        param_dist['feature_selection__k'] = range(1,num_features+1)
+            
+            # Add default estimator parameters
+            if estimator == 'knn':
+                # Add default number of neighbors for k-nearest neighbors
+                if 'estimator__n_neighbors' not in param_dist:
+                    param_dist['estimator__n_neighbors'] = range(1,31)
+                    
+                # Add default point metric options for for k-nearest neighbors
+                if 'estimator__weights' not in param_dist:
+                    param_dist['estimator__weights'] = ['uniform','distance']
+            elif estimator == 'logistic_regression':
+                if 'estimator__C' not in param_dist:
+                    param_dist['estimator__C'] = np.logspace(-10,10,5)
+            elif estimator == 'polynomial_regression':
+                if 'pre_estimator__degree' not in param_dist:
+                    param_dist['pre_estimator__degree'] = range(1,5)
+            elif estimator == 'multilayer_perceptron':
+                if 'estimator__hidden_layer_sizes' not in param_dist: 
+                    param_dist['estimator__hidden_layer_sizes'] = [[x] for x in range(min(3,num_features),max(3,num_features)+1)]
+            elif estimator == 'random_forest':
+                if 'estimator__n_estimators' not in param_dist:
+                    param_dist['estimator__n_estimators'] = range(90,100)
+    
+        
+        
+        # Set scoring
+        if estimator in classifiers:
+            scoring = 'accuracy'
+        elif estimator in regressors:
+            scoring = 'neg_mean_squared_error'
+            
+        # Print grid parameters
+        if not suppress_output:
+            print('Grid parameters:')
+            for x in param_dist:
+                print(x,':',param_dist[x])
+        
+        # Initialize full or randomized grid search
+        if num_parameter_combos:
+            grid_search = RandomizedSearchCV(pipeline,
+                                             param_dist,
+                                             cv=cv,scoring=scoring,
+                                             n_iter=num_parameter_combos, # n_iter=10 means 10 random parameter combinations tried
+                                             n_jobs=n_jobs)
+        else:
+            grid_search = GridSearchCV(pipeline, 
+                                       param_dist,
+                                       cv=cv, scoring=scoring,n_jobs=n_jobs)
+        
+        # Split data into train and test sets
+        X_train, X_test, y_train, y_test = \
+            train_test_split(X,y,test_size=0.2,random_state=random_state)
+        
+        # Perform grid search using above parameters
+        grid_search.fit(X_train,y_train)
+        
+        # Make prediction based on model
+        y_pred = grid_search.best_estimator_.predict(X_test)
+    
+        # Print scores
+        if estimator in classifiers:
+            # Calculate confusion matrix
+            pipeline.confusion_matrix = confusion_matrix(y_test, y_pred)
+            
+            # Save estimator type
+            pipeline.score_type = 'classification'
+            
+            # Get and save training score
+            pipeline.train_score = grid_search.best_score_
+            
+            # Get and save test score
+            pipeline.test_score = pipeline.confusion_matrix.trace()/float(pipeline.confusion_matrix.sum())
+            
+            # Calculate and save normalized confusion matrix
+            pipeline.normalized_confusion_matrix = pipeline.confusion_matrix/float(pipeline.confusion_matrix.sum())
+            
+            # Save classification report
+            pipeline.classification_report = classification_report(y_test, y_pred)        
+            
+            # Print output if desired
+            if not suppress_output:
+                # Print training and test scores
+                print('\nTraining set classification accuracy: ', pipeline.train_score)
+                print('\nTest set classification accuracy: ', pipeline.test_score)
+                
+                # Print out confusion matrix and normalized confusion matrix containing probabilities
+                print('Confusion matrix: \n\n',pipeline.confusion_matrix)
+                print('\nNormalized confusion matrix: \n\n', pipeline.normalized_confusion_matrix)
+        
+                # Print out classification report
+                print('\nClassification report: \n\n',pipeline.classification_report)
+        elif estimator in regressors:
+            # Save estimator type
+            pipeline.score_type = 'regression'
+            
+            # Calculate and save training and test scores
+            pipeline.train_score = -grid_search.best_score_
+            pipeline.test_score = np.sqrt(np.square(y_test-y_pred).sum(axis=0))
+            
+            # Print output if desired
+            if not suppress_output:
+                print('\nTraining L2 norm score: ',pipeline.train_score)
+                print('\nTest L2 norm score: ',pipeline.test_score)
+        
+        # Save best parameters
+        pipeline.best_parameters = grid_search.best_params_
+        
+        # Print best parameters
+        if not suppress_output:
+            print('\nBest parameters:\n')
+            print(pipeline.best_parameters)
+    
+        # Fit pipeline with best parameters obtained from grid search using all data
+        pipeline.set_params(**grid_search.best_params_).fit(X, y)
+    
+        # Print pipeline
+        if not suppress_output:
+            print('\n',pipeline)
+        
+        # Return pipeline
+        return pipeline # Use pipeline.predict() for productionalization        
+    
+        
+        
+        
+        
+        
+
+
 def train_model(X,y,
                scale_type=None,
                feature_interactions=False,
@@ -119,8 +460,7 @@ def train_model(X,y,
             pipeline_steps.append(('transform', PCA()))
         elif transform_type == 't-sne':            
             pipeline_steps.append(('transform', pipeline_TSNE(n_components=2, init='pca')))
-            #pipeline_steps.append(('transform', TSNE(n_components=2, init='pca')))
-                            
+    
     # Add estimator
     if estimator in estimator_options:
         if estimator == 'knn':
