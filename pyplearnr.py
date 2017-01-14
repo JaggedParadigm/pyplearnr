@@ -16,7 +16,7 @@ from sklearn.feature_selection import SelectKBest, f_classif
 
 # Unsupervised learning tools
 from sklearn.decomposition import PCA
-#from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.lda import LDA
 from sklearn.manifold import TSNE
 
 # Classifiers
@@ -33,12 +33,10 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 
 # Cross validation tools
-#from sklearn.cross_validation import train_test_split
-from sklearn.model_selection import train_test_split
+from sklearn.cross_validation import train_test_split
 from sklearn.pipeline import Pipeline
-
-from sklearn.model_selection import GridSearchCV
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.grid_search import GridSearchCV
+from sklearn.grid_search import RandomizedSearchCV
 
 # Classification metrics
 import sklearn.metrics as sklearn_metrics
