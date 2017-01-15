@@ -1,6 +1,9 @@
 # Make compatible with Python 3
 from __future__ import print_function
 
+# Author: Christopher M. Shymansky <CMShymansky@gmail.com>,
+# License: ALv2
+
 # Basic tools
 import numpy as np
 import pandas as pd
