@@ -134,7 +134,7 @@ class OptimizedPipeline:
                    classification_report):
         
         # Collect pipeline steps and key,value pairs for all parameters
-        format_str = '{0:15}{1:20}{2:1}{3:<10}'
+        format_str = '{0:20}{1:20}{2:1}{3:<10}'
         
         blank_line = ['','','','']
         
@@ -198,7 +198,7 @@ class OptimizedPipeline:
             )%(pipeline_str,train_score,test_score,
                np.array_str(confusion_matrix),np.array_str(normalized_confusion_matrix),
                classification_report,grid_search_str)
-        elif estimator_type == 'refressor':
+        elif estimator_type == 'regressor':
             report = (
             "\nPipeline:\n\n%s\n"
             "\nTraining L2 norm score: %1.3f"
