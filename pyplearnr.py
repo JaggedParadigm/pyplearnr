@@ -203,7 +203,7 @@ class OptimizedPipeline:
             "\nPipeline:\n\n%s\n"
             "\nTraining L2 norm score: %1.3f"
             "'\nTest L2 norm score: %1.3f"
-            "\nGrid search parameters:\n\n%s\n"
+            "\n\nGrid search parameters:\n\n%s\n"
             )%(pipeline_str,train_score,test_score,grid_search_str)
         else:
             report = None
