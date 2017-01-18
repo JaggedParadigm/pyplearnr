@@ -267,6 +267,10 @@ class OptimizedPipeline:
         if scale_type:
             if scale_type == 'standard':
                 pipeline_steps.append(('scaler', StandardScaler()))
+            elif scale_type == 'normal':
+                pipeline_steps.append(('scaler', Normalizer()))
+            elif scale_type == 'min_max':
+                pipeline_steps.append(('scaler', MinMaxScaler()))
                 
         # Add feature interactions
         if feature_interactions:
