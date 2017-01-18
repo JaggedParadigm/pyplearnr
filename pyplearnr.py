@@ -271,6 +271,8 @@ class OptimizedPipeline:
                 pipeline_steps.append(('scaler', Normalizer()))
             elif scale_type == 'min_max':
                 pipeline_steps.append(('scaler', MinMaxScaler()))
+            elif scale_type == 'binary':
+                pipeline_steps.append(('scaler', Binarizer()))
                 
         # Add feature interactions
         if feature_interactions:
@@ -375,9 +377,20 @@ class OptimizedPipeline:
         # Set param_dist to empty dictionary if not given
         if not param_dist:
             param_dist = {}
-            
+        else:
+            param_dist = dict(param_dist)
+        
         # Add default scaling step to grid parameters
         if use_default_param_dist:
+            # Add scaling step
+            if scale_type:
+                if scale_type == 'min_max':
+                    if 'scaler__feature_range' not in param_dist:
+                        param_dist['scaler__feature_range'] = [(0,1)]                        
+                elif scale_type == 'binary':
+                    if 'scaler__threshold' not in param_dist:
+                        param_dist['scaler__threshold'] = [0.5]
+                        
             # Add default feature interaction parameters
             if feature_interactions:
                 if 'feature_interactions__degree' not in param_dist:
