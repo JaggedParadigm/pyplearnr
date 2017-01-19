@@ -10,8 +10,8 @@ import pandas as pd
 
 # Scalers
 from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import Normalizer
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import Binarizer
 
 # Feature selection tools
