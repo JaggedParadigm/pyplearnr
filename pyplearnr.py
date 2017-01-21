@@ -127,14 +127,14 @@ class OptimizedPipeline:
         # Convert X and y to ndarray if either Pandas series or dataframe
         if type(X) is not np.ndarray:
             if type(X) is pd.core.frame.DataFrame or type(X) is pd.core.series.Series:
-                X = X.values
+                X = np.array(X.values)
             else:
                 raise Exception('Data input, X, must be of type pandas.core.frame.DataFrame, \
                                 pandas.core.series.Series, or numpy.ndarray')
-        
+                
         if type(y) is not np.ndarray:        
             if type(y) is pd.core.frame.DataFrame or type(y) is pd.core.series.Series:
-                y = y.values
+                y = np.array(y.values)
             else:
                 raise Exception('Data output, y, must be of type pandas.core.frame.DataFrame, \
                                 pandas.core.series.Series, or numpy.ndarray')
