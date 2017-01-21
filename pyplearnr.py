@@ -112,6 +112,89 @@ class OptimizedPipeline:
         
         self.best_parameters_ = None # Best parameters
         
+    def fit(self,X,y,
+            cv=10,
+            num_parameter_combos=None,
+            n_jobs=-1,
+            random_state=None,
+            suppress_output=False,
+            use_default_param_dist=True,
+            param_dist=None,
+            test_size=0.2):
+        """
+        Uses the optimize_pipeline method to optimize object pipeline through nested k-folds cross validation
+        """
+        # Convert X and y to ndarray if either Pandas series or dataframe
+        if type(X) is not np.ndarray:
+            if type(X) is pd.core.frame.DataFrame or type(X) is pd.core.series.Series:
+                X = np.array(X.values)
+            else:
+                raise Exception('Data input, X, must be of type pandas.core.frame.DataFrame, \
+                                pandas.core.series.Series, or numpy.ndarray')
+                
+        if type(y) is not np.ndarray:        
+            if type(y) is pd.core.frame.DataFrame or type(y) is pd.core.series.Series:
+                y = np.array(y.values)
+            else:
+                raise Exception('Data output, y, must be of type pandas.core.frame.DataFrame, \
+                                pandas.core.series.Series, or numpy.ndarray')
+        
+        # Save data
+        self.X = X.copy()
+        self.y = y.copy()
+        
+        # Split data into train and test sets
+        self.X_train, self.X_test, self.y_train, self.y_test = \
+            train_test_split(X,y,test_size=test_size,random_state=random_state)
+        
+        # Save cross-validation settings
+        self.cv = cv
+        self.num_parameter_combos = num_parameter_combos
+        
+        # Save number of features
+        self.feature_count = self.X.shape[1]
+        
+        # Determine estimator type
+        self.estimator_type = self.get_estimator_type(self.estimator,self.feature_count)        
+        
+        # Derive pipeline parameters to grid over
+        self.param_dist = self.get_parameter_grid(self.estimator,self.feature_count,
+                                                  feature_selection_type=self.feature_selection_type,
+                                                  scale_type=self.scale_type,
+                                                  feature_interactions=self.feature_interactions,
+                                                  param_dist=param_dist,
+                                                  use_default_param_dist=use_default_param_dist)
+        
+        # Fit pipeline using nested k-folds cross validation
+        self.grid_search = self.optimize_pipeline(self.X_train,self.y_train,self.pipeline,self.scoring,
+                                                  self.param_dist,
+                                                  cv=self.cv,
+                                                  n_jobs=n_jobs,
+                                                  num_parameter_combos=num_parameter_combos)
+        
+        # Save pipeline metrics and predicated values
+        pipeline_metrics = self.test_pipeline(self.X_test,self.y_test,self.grid_search,self.estimator_type)
+        
+        self.y_pred = pipeline_metrics['y_pred']
+        
+        self.train_score_ = pipeline_metrics['train_score']
+        self.test_score_ = pipeline_metrics['test_score']
+        
+        if self.estimator_type == 'classifier':
+            self.confusion_matrix_ = pipeline_metrics['confusion_matrix']
+            self.normalized_confusion_matrix_ = pipeline_metrics['normalized_confusion_matrix']
+            self.classification_report_ = pipeline_metrics['classification_report']
+        
+        # Save best parameters
+        self.best_parameters_ = self.grid_search.best_params_
+        
+        # Fit pipeline with best parameters obtained from grid search using all data
+        self.pipeline.set_params(**self.grid_search.best_params_).fit(X,y)
+        
+        # Display model validation details
+        if not suppress_output:
+            print(self)                
+        
     def __str__(self):
         return self.get_report(self.pipeline,
                                self.grid_search,
@@ -425,90 +508,7 @@ class OptimizedPipeline:
                     param_dist['estimator__n_estimators'] = range(90,100)
         
         # Return parameters    
-        return param_dist    
-
-    def fit(self,X,y,
-            cv=10,
-            num_parameter_combos=None,
-            n_jobs=-1,
-            random_state=None,
-            suppress_output=False,
-            use_default_param_dist=True,
-            param_dist=None,
-            test_size=0.2):
-        """
-        Uses the optimize_pipeline method to optimize object pipeline through nested k-folds cross validation
-        """
-        # Convert X and y to ndarray if either Pandas series or dataframe
-        if type(X) is not np.ndarray:
-            if type(X) is pd.core.frame.DataFrame or type(X) is pd.core.series.Series:
-                X = X.values
-            else:
-                raise Exception('Data input, X, must be of type pandas.core.frame.DataFrame, \
-                                pandas.core.series.Series, or numpy.ndarray')
-        
-        if type(y) is not np.ndarray:        
-            if type(y) is pd.core.frame.DataFrame or type(y) is pd.core.series.Series:
-                y = y.values
-            else:
-                raise Exception('Data output, y, must be of type pandas.core.frame.DataFrame, \
-                                pandas.core.series.Series, or numpy.ndarray')
-        
-        # Save data
-        self.X = X.copy()
-        self.y = y.copy()
-        
-        # Split data into train and test sets
-        self.X_train, self.X_test, self.y_train, self.y_test = \
-            train_test_split(X,y,test_size=test_size,random_state=random_state)
-        
-        # Save cross-validation settings
-        self.cv = cv
-        self.num_parameter_combos = num_parameter_combos
-        
-        # Save number of features
-        self.feature_count = self.X.shape[1]
-        
-        # Determine estimator type
-        self.estimator_type = self.get_estimator_type(self.estimator,self.feature_count)        
-        
-        # Derive pipeline parameters to grid over
-        self.param_dist = self.get_parameter_grid(self.estimator,self.feature_count,
-                                                  feature_selection_type=self.feature_selection_type,
-                                                  scale_type=self.scale_type,
-                                                  feature_interactions=self.feature_interactions,
-                                                  param_dist=param_dist,
-                                                  use_default_param_dist=use_default_param_dist)
-        
-        # Fit pipeline using nested k-folds cross validation
-        self.grid_search = self.optimize_pipeline(self.X_train,self.y_train,self.pipeline,self.scoring,
-                                                  self.param_dist,
-                                                  cv=self.cv,
-                                                  n_jobs=n_jobs,
-                                                  num_parameter_combos=num_parameter_combos)
-        
-        # Save pipeline metrics and predicated values
-        pipeline_metrics = self.test_pipeline(self.X_test,self.y_test,self.grid_search,self.estimator_type)
-        
-        self.y_pred = pipeline_metrics['y_pred']
-        
-        self.train_score_ = pipeline_metrics['train_score']
-        self.test_score_ = pipeline_metrics['test_score']
-        
-        if self.estimator_type == 'classifier':
-            self.confusion_matrix_ = pipeline_metrics['confusion_matrix']
-            self.normalized_confusion_matrix_ = pipeline_metrics['normalized_confusion_matrix']
-            self.classification_report_ = pipeline_metrics['classification_report']
-        
-        # Save best parameters
-        self.best_parameters_ = self.grid_search.best_params_
-        
-        # Fit pipeline with best parameters obtained from grid search using all data
-        self.pipeline.set_params(**self.grid_search.best_params_).fit(X,y)
-        
-        # Display model validation details
-        if not suppress_output:
-            print(self)               
+        return param_dist           
         
     def test_pipeline(self,X_test,y_test,grid_search,estimator_type):
         # Initialize pipeline metrics
