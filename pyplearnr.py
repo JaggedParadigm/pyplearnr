@@ -7,6 +7,7 @@ from __future__ import print_function
 # Basic tools
 import numpy as np
 import pandas as pd
+import itertools
 
 # Scalers
 from sklearn.preprocessing import StandardScaler
@@ -49,7 +50,114 @@ class pipeline_TSNE(TSNE):
     def transform(self,X):
         return self.fit_transform(X)
 
-class OptimizedPipeline:
+class OptimizationBundle:
+    """
+    """
+    pass
+
+    def __init__(self):
+        """
+        """
+        pass
+    
+    def fit(self,X,y):
+        """
+        """
+        # Set output feature
+        output_feature = 'diabetes'
+        
+        # Get input features
+        input_features = [x for x in X_interaction.columns if x != output_feature]
+        
+        # Split into features and responses
+        X = X_interaction.copy()
+        y = test_df[output_feature].copy()
+        
+        estimators = ['knn','logistic_regression','svm',
+                      'multilayer_perceptron','random_forest','adaboost']
+        
+        feature_interaction_options = [False]
+        feature_selection_options = [None,'select_k_best']
+        scaling_options = [None,'standard','normal','min_max','binary']
+        transformations = [None,'pca']
+        
+        pipeline_steps = [feature_interaction_options,feature_selection_options,scaling_options,
+                          transformations,estimators]
+        
+        pipeline_options = list(itertools.product(*pipeline_steps))
+        
+        optimized_pipelines = {}
+        
+        pipeline_count = len(pipeline_options)
+        
+        for pipeline_step_combo_ind,pipeline_step_combo in enumerate(pipeline_options):
+            model_name = []
+            
+            feature_interactions = pipeline_step_combo[0]
+            
+            model_name.append('interaction')
+            
+            if feature_interactions:
+                model_name.append('interactions')
+                
+            feature_selection_type = pipeline_step_combo[1]
+            
+            if feature_selection_type:
+                model_name.append('select')
+            
+            scale_type = pipeline_step_combo[2]
+            
+            if scale_type:
+                model_name.append(scale_type)
+                
+            transform_type = pipeline_step_combo[3]
+            
+            if transform_type:
+                model_name.append(transform_type)
+                
+            estimator = pipeline_step_combo[4]
+            
+            model_name.append(estimator)
+            
+            model_name = '_'.join(model_name)
+            
+            print(model_name,'%d/%d'%(pipeline_step_combo_ind,pipeline_count))
+            
+            # Set pipeline keyword arguments
+            optimized_pipeline_kwargs = {
+                'feature_selection_type': feature_selection_type,
+                'scale_type': scale_type,
+                'feature_interactions': feature_interactions,
+                'transform_type': transform_type
+                }
+        
+            # Initialize pipeline
+            optimized_pipeline = ppl.OptimizedPipeline(estimator,**optimized_pipeline_kwargs)
+        
+            # Set pipeline fitting parameters
+            fit_kwargs = {
+                'cv': 10,
+                'num_parameter_combos': None,
+                'n_jobs': -1,
+                'random_state': None,
+                'suppress_output': True,
+                'use_default_param_dist': True,
+                'param_dist': None,
+                'test_size': 0.2 # 20% saved as test set
+            }
+        
+            # Fit data
+            optimized_pipeline.fit(X,y,**fit_kwargs)
+        
+            # Save optimized pipeline
+            optimized_pipelines[model_name] = optimized_pipeline        
+    
+    def plot_test_scores(self):
+        """
+        """
+        
+
+class PipelineOptimization:
     """
     Pipeline with optimal parameters found through nested k-folds cross validation
     """
@@ -482,6 +590,13 @@ class OptimizedPipeline:
             # Add default feature selection parameters
             if feature_selection_type:
                 if feature_selection_type == 'select_k_best' and 'feature_selection__k' not in param_dist:
+                    """
+                    1 feature, 1 interaction degree, 1 combined feature
+                    n features, 1 interaction degree, n combined features
+                    2 features, 2 interaction degree, 2 + 1 = 3 combined features
+                    3 features, 2 interaction degree, 3 + 3 + (4-1) = 9
+                    4 features, 2 interactions degree, 4 + 4 + ()
+                    """
                     if not feature_interactions:
                         param_dist['feature_selection__k'] = range(1,feature_count+1)
             
