@@ -250,11 +250,7 @@ class PipelineOptimization:
         # Save data
         self.X = X.copy()
         self.y = y.copy()
-        
-        # Split data into train and test sets
-        self.X_train, self.X_test, self.y_train, self.y_test = \
-            train_test_split(X,y,test_size=test_size,random_state=random_state)
-        
+
         # Save cross-validation settings
         self.cv = cv
         self.num_parameter_combos = num_parameter_combos
@@ -263,7 +259,17 @@ class PipelineOptimization:
         self.feature_count = self.X.shape[1]
         
         # Determine estimator type
-        self.estimator_type = self.get_estimator_type(self.estimator,self.feature_count)        
+        self.estimator_type = self.get_estimator_type(self.estimator,self.feature_count)
+        
+        # Make initial split stratified if classifier
+        if self.estimator_type == 'classifier':
+            stratify = self.y
+        else:
+            stratify = None
+        
+        # Split data into train and test sets
+        self.X_train, self.X_test, self.y_train, self.y_test = \
+            train_test_split(self.X,self.y,test_size=test_size,random_state=random_state,stratify=stratify)
         
         # Derive pipeline parameters to grid over
         self.param_dist = self.get_parameter_grid(self.estimator,self.feature_count,
