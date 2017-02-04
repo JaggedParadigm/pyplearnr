@@ -3,7 +3,7 @@
 For now, simply clone the respository, link to the location in your code, and import it. 
 
 ## Use
-See the [demo](pyplearnr_demo.ipynb) for use of pyplearnr.
+See the [demo](https://nbviewer.jupyter.org/github/JaggedParadigm/pyplearnr/blob/master/pyplearnr_demo.ipynb) for use of pyplearnr.
 
 # What
 Pyplearnr is a way to build, validate, and test multiple scikit learn pipelines, with varying steps, in a less verbose manner.
