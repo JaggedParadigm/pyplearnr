@@ -7,6 +7,7 @@ from __future__ import print_function
 
 # Basic tools
 import numpy as np
+import random
 import pandas as pd
 import itertools
 
@@ -39,12 +40,192 @@ from sklearn.linear_model import LinearRegression
 
 # Cross validation tools
 from sklearn.cross_validation import train_test_split
+from sklearn.model_selection import KFold
+from sklearn.utils import shuffle
 from sklearn.pipeline import Pipeline
 from sklearn.grid_search import GridSearchCV
 from sklearn.grid_search import RandomizedSearchCV
 
 # Classification metrics
 import sklearn.metrics as sklearn_metrics
+
+# Visualization
+import matplotlib.pylab as plt
+
+class DataSuite:
+    """
+    """
+    def __init__(self):
+        # Initialize variables
+        self.suite = []
+
+    def load_data(self):
+        """
+        Loads data into a directory with csv files
+        """
+
+        pass
+
+    def plot(self):
+        """
+        """
+        pass
+
+    def fit(self):
+        """
+        Finds best model for each data suite
+        """
+        pass
+
+class Data:
+    """
+    """
+    def __init__(self):
+        """
+        """
+        pass
+
+    def plot(self):
+        """
+        """
+        pass
+
+class KFoldsCrossValidation:
+    """
+    """
+    pass
+
+
+
+
+# Set k-fold value
+k_folds = 2
+iterations = 2000
+
+for df_ind,df in enumerate(dfs):
+    fig,ax = plt.subplots(1,1)
+
+    multiple_scores = []
+    validation_scores = []
+    coefs = []
+
+    for x_ind in range(iterations):
+        # Initialize k-fold cross-validation data structure
+        kfcv = {
+            'shuffle_seed': None,
+            'fold_seed': None,
+            'X': None,
+            'y': None,
+            'shuffled_X': None,
+            'shuffled_y': None,
+            'k_fold_X': None,
+            'k_fold_y': None,
+            'validation_X': None,
+            'validation_y': None,
+            'validation_y_pred': None,
+            'folds': [],
+            'score': None
+        }
+
+        # Generate seeds (*20 since 5-fold CV results in range of 1 to 100)
+        kfcv['shuffle_seed'], kfcv['fold_seed'] = [random.randint(1,k_folds*20) for x in range(2)]
+
+        # Split data into input and target data and save
+        kfcv['X'] = df['x'].values
+        kfcv['y'] = df['y'].values
+
+        # Shuffle and save data
+        kfcv['shuffled_X'],kfcv['shuffled_y'] = \
+            shuffle(X.copy(),y.copy(),random_state=shuffle_seed)
+
+        # Split data into training (that will use k-fold CV) and validation sets
+        k_fold_X, X_validation, k_fold_y, y_validation = \
+                train_test_split(kfcv['shuffled_X'],kfcv['shuffled_y'],
+                                 test_size=1/float(k_folds+1),random_state=kfcv['fold_seed'])
+
+        # Save validation set
+        kfcv['validation_X'] = X_validation.copy().reshape(-1,1)
+        kfcv['validation_y'] = y_validation.copy().reshape(-1,1)
+
+        # Save k-fold cross-validation set
+        kfcv['k_fold_X'] = k_fold_X.copy().reshape(-1,1)
+        kfcv['k_fold_y'] = k_fold_y.copy().reshape(-1,1)
+
+        # Perform k-folds cross-validation on each fold of this run
+        for train_indices, test_indices in KFold(n_splits=k_folds).split(kfcv['k_fold_X'],kfcv['k_fold_y']):
+            # Split data into train and test sets and save and initialize fold data structure
+            kfcv['folds'].append({
+                    'train_inds': train_indices,
+                    'test_inds': test_indices,
+                    'X_train': kfcv['k_fold_X'][train_indices].reshape(-1,1),
+                    'y_train': kfcv['k_fold_y'][train_indices].reshape(-1,1),
+                    'X_test': kfcv['k_fold_X'][test_indices].reshape(-1,1),
+                    'y_test': kfcv['k_fold_y'][test_indices].reshape(-1,1),
+                    'estimator': None,
+                    'y_pred': None,
+                    'score': None
+                }
+            )
+
+            # Initialize estimator
+            estimator = LinearRegression()
+
+            # Fit estimator using training data
+            estimator.fit(kfcv['folds'][-1]['X_train'],kfcv['folds'][-1]['y_train'])
+
+            # Save estimator after fitting
+            kfcv['folds'][-1]['estimator'] = estimator
+
+            # Calculate and save predicted value
+            kfcv['folds'][-1]['y_pred'] = kfcv['folds'][-1]['estimator'].predict(kfcv['folds'][-1]['X_test'])
+
+            # Calculate and save score
+            kfcv['folds'][-1]['score'] = np.sqrt(np.square(kfcv['folds'][-1]['y_test']-kfcv['folds'][-1]['y_pred']).sum(axis=0))[0]
+
+        # Initialize and save estimator that will be trained on all the k-fold data
+        kfcv['k_fold_estimator'] = LinearRegression()
+
+        # Train estimator on all k-fold data
+        kfcv['k_fold_estimator'].fit(kfcv['k_fold_X'],kfcv['k_fold_y'])
+
+        # Get predicted y based on validation X
+        kfcv['validation_y_pred'] = kfcv['k_fold_estimator'].predict(kfcv['validation_X'])
+
+        # Calculate and save rmse score
+        kfcv['score'] = np.sqrt(np.square(kfcv['validation_y']-kfcv['validation_y_pred']).sum(axis=0))[0]
+
+        # Save score for each k-folds cross validation run
+        validation_scores.append(kfcv['score'])
+
+        # Obtain mean of test scores and save
+        fold_scores = [fold['score'] for fold in kfcv['folds']]
+
+        multiple_scores.append(np.mean(fold_scores))
+
+
+        coefs.append([kfcv['k_fold_estimator'].coef_[0][0],kfcv['k_fold_estimator'].intercept_[0]])
+
+    # Visualize test
+    score_df = pd.DataFrame(np.array([multiple_scores,validation_scores]).T,columns=['test_scores','validation_scores'])
+
+    score_df['validation_scores'].plot(ax=ax,kind='hist',alpha=0.5,bins=10)
+    score_df['test_scores'].plot(ax=ax,kind='hist',alpha=0.5,bins=10)
+
+    fig,ax = plt.subplots(1,1)
+
+    coef_df = pd.DataFrame(np.array(coefs),columns=['a','b'])
+
+
+    coef_df['a'].plot(ax=ax,kind='hist',alpha=0.5,bins=10)
+
+
+    fig,ax = plt.subplots(1,1)
+
+    coef_df['b'].plot(ax=ax,kind='hist',alpha=0.5,bins=10)
+
+    print np.mean(multiple_scores),np.std(multiple_scores,ddof=1)
+
+    print np.mean(validation_scores),np.std(validation_scores,ddof=1)
 
 # Define custom TSNE class so that it will work with pipeline
 class pipeline_TSNE(TSNE):
