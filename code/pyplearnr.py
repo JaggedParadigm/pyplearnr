@@ -1,6 +1,3 @@
-# Make compatible with Python 3
-from __future__ import print_function
-
 # Author: Christopher M. Shymansky <CMShymansky@gmail.com>,
 # License: ALv2
 # Date created: 2016-11-25
@@ -60,6 +57,25 @@ class NestedKFoldCrossValidation:
     """
     def __init__(self, outer_loop_fold_count=3, inner_loop_fold_count=3,
                  outer_loop_split_seed=None, inner_loop_split_seed=None):
+
+        ############### Check input types ###############
+        outer_loop_fold_count_error = "The outer_loop_fold_count" \
+            " keyword argument, dictating the number of folds in the outer " \
+            "loop, must be a positive integer"
+
+        assert type(outer_loop_fold_count) is int, outer_loop_fold_count_error
+
+        assert outer_loop_fold_count > 0, outer_loop_fold_count_error
+
+        inner_loop_fold_count_error = "The inner_loop_fold_count" \
+            " keyword argument, dictating the number of folds in the inner" \
+            " loop, must be a positive integer"
+
+        assert type(inner_loop_fold_count) is int, inner_loop_fold_count_error
+
+        assert inner_loop_fold_count > 0, inner_loop_fold_count_error
+
+
         ############### Initialize fields ###############
         # Total number of folds in outer and inner loops
         self.outer_loop_fold_count = outer_loop_fold_count
@@ -84,14 +100,6 @@ class NestedKFoldCrossValidation:
                 )
 
         ############### Check fields ###############
-        assert type(self.outer_loop_fold_count) is int, "The " \
-            "outer_loop_fold_count keyword argument, dictating the number of " \
-            "folds in the outer loop, must be an integer"
-
-        assert type(self.inner_loop_fold_count) is int, "The " \
-            "inner_loop_fold_count keyword argument, dictating the number of " \
-            "folds in the inner loop, must be an integer"
-
         assert type(self.outer_loop_split_seed) is int, "The " \
             "outer_loop_split_seed keyword argument, dictating how the data "\
             "is split into folds for the outer loop, must be an integer."
