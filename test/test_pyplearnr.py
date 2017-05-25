@@ -24,7 +24,6 @@ class NestedKFoldCrossValidationTestCase(unittest.TestCase):
                                   [],kwargs)
 
     def test_init_inner_loop_fold_count(self):
-        print 'ayy'
         msg = "The inner_loop_fold_count" \
             " keyword argument, dictating the number of folds in the inner" \
             " loop, must be a positive integer"
@@ -34,10 +33,9 @@ class NestedKFoldCrossValidationTestCase(unittest.TestCase):
         }
 
         self.assert_with_messsage(msg, ppl.NestedKFoldCrossValidation,
-                                  [],kwargs)
+                                  [], kwargs)
 
-
-    def assert_with_messsage(self, msg, func, *args, **kwargs):
+    def assert_with_messsage(self, msg, func, args, kwargs):
         try:
             func(*args, **kwargs)
             self.assertFail()

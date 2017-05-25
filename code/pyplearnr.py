@@ -57,7 +57,6 @@ class NestedKFoldCrossValidation:
     """
     def __init__(self, outer_loop_fold_count=3, inner_loop_fold_count=3,
                  outer_loop_split_seed=None, inner_loop_split_seed=None):
-
         ############### Check input types ###############
         outer_loop_fold_count_error = "The outer_loop_fold_count" \
             " keyword argument, dictating the number of folds in the outer " \
@@ -74,7 +73,6 @@ class NestedKFoldCrossValidation:
         assert type(inner_loop_fold_count) is int, inner_loop_fold_count_error
 
         assert inner_loop_fold_count > 0, inner_loop_fold_count_error
-
 
         ############### Initialize fields ###############
         # Total number of folds in outer and inner loops
