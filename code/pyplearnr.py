@@ -38,6 +38,7 @@ from sklearn.linear_model import LinearRegression
 # Cross validation tools
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
 from sklearn.utils import shuffle
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV
@@ -49,14 +50,44 @@ import sklearn.metrics as sklearn_metrics
 # Visualization
 import matplotlib.pylab as plt
 
-class NestedKFoldCrossValidation:
+class FoldInds(object):
+    """
+    Class containing test/train split indices for inner folds of nest k-fold
+    cross-validation run
+    """
+    def __init__(self, fold_id=None, test_fold_inds=None,
+                 train_fold_inds=None):
+        ############### Initialize fields ###############
+        self.fold_id = fold_id
+
+        self.test_fold_inds = test_fold_inds
+
+        self.train_fold_inds = train_fold_inds
+
+class OuterFoldInds(FoldInds):
+    """
+    Class containing test/train split indices for data
+    """
+    def __init__(self, fold_id=None, test_fold_inds=None,
+                 train_fold_inds=None):
+        ############### Initialize fields ###############
+
+        super(OuterFoldInds, self).__init__(fold_id=fold_id,
+                                      test_fold_inds=test_fold_inds,
+                                      train_fold_inds=train_fold_inds)
+
+        # Folds for inner k-fold cross-validation
+        self.inner_folds = {}
+
+class NestedKFoldCrossValidation(object):
     """
     Class that handles nested k-fold cross validation, whereby the inner loop
     handles the model selection and the outer loop is used to provide an
     estimate of the chosen model's out of sample score.
     """
     def __init__(self, outer_loop_fold_count=3, inner_loop_fold_count=3,
-                 outer_loop_split_seed=None, inner_loop_split_seed=None):
+                 outer_loop_split_seed=None, inner_loop_split_seed=None,
+                 shuffle_flag=True, shuffle_seed=None):
         ############### Check input types ###############
         outer_loop_fold_count_error = "The outer_loop_fold_count" \
             " keyword argument, dictating the number of folds in the outer " \
@@ -75,6 +106,12 @@ class NestedKFoldCrossValidation:
         assert inner_loop_fold_count > 0, inner_loop_fold_count_error
 
         ############### Initialize fields ###############
+        # Flag determining if initial data should be shuffled_y
+        self.shuffle_flag = shuffle_flag
+
+        # Seed determining shuffling of initial data
+        self.shuffle_seed = shuffle_seed
+
         # Total number of folds in outer and inner loops
         self.outer_loop_fold_count = outer_loop_fold_count
         self.inner_loop_fold_count = inner_loop_fold_count
@@ -83,19 +120,32 @@ class NestedKFoldCrossValidation:
         self.outer_loop_split_seed = outer_loop_split_seed
         self.inner_loop_split_seed = inner_loop_split_seed
 
+        # Shuffled data indices
+        self.shuffled_data_inds = None
+
+        # Test/train fold indices
+        self.outer_folds = {}
+
+        self.outer_loop_test_fold_indices = []
+        self.outer_loop_train_fold_indices = []
+        self.inner_loop_test_fold_indices = []
+        self.inner_loop_train_fold_indices = []
+
+        # Generate seed for initial shuffling of data if not provided
+        if not self.shuffle_seed:
+            self.shuffle_seed = random.randint(1,5000)
+
         # Generate seeds if not given (*20 since 5-fold CV results in range
         # of 1 to 100)
         if not self.outer_loop_split_seed:
             self.outer_loop_split_seed = random.randint(
-                1,
-                self.outer_loop_fold_count*20
-                )
+                                            1,
+                                            self.outer_loop_fold_count*20)
 
         if not self.inner_loop_split_seed:
             self.inner_loop_split_seed = random.randint(
-                1,
-                self.inner_loop_fold_count*20
-                )
+                                            1,
+                                            self.inner_loop_fold_count*20)
 
         ############### Check fields ###############
         assert type(self.outer_loop_split_seed) is int, "The " \
@@ -106,11 +156,94 @@ class NestedKFoldCrossValidation:
             "inner_loop_split_seed keyword argument, dictating how the data "\
             "is split into folds for the inner loop, must be an integer."
 
-    def get_outer_split_indices(self):
+    def get_shuffled_data_inds(self, point_count):
         """
+        Returns shuffled data indices given number of data points
+        """
+        shuffled_data_inds = np.arange(point_count)
 
+        np.random.shuffle(shuffled_data_inds)
+
+        return shuffled_data_inds
+
+    def get_outer_split_indices(self, X, y=None, stratified=False):
         """
-        pass
+        Returns test-fold indices given the feature matrix, X, optional target
+        values, y, and whether the split is to be stratified, stratified.
+        """
+        ################ Check inputs ###############
+        assert type(X) is np.ndarray, "Feature matrix, X, must be of type " \
+            "numpy.ndarray."
+
+        if y.any():
+            assert type(y) is np.ndarray, "Target vector, y, must be of type " \
+                "numpy.ndarray if given."
+
+            assert len(y.shape) == 1, "Target vector must have a flat shape. " \
+                "In other words the shape should be (m,) instead of (m,1) or " \
+                "(1,m)."
+
+        assert len(X.shape) == 2, "Feature matrix, X, must be 2-dimensional. " \
+            "If the intention was to have only one data point with a single " \
+            "value for each feature make the array (1,n). If there is only " \
+            "one feature make the array nx1 (instead of just having a shape " \
+            "of (n,))."
+
+        if y.any():
+            assert X.shape[0] == y.shape[0], "The number of rows of the " \
+                "feature matrix, X, must match the length of the target " \
+                "value vector, y, if given."
+
+        assert type(stratified) is bool, "The keyword argument determining " \
+            "whether the splits are to be stratified or not, stratified, must" \
+            " be boolean (True or False)."
+
+        if stratified:
+            assert y.any(), "Target value vector keyword argument, y, must " \
+                "be present if stratified split keyword argument, stratified," \
+                " is True."
+
+        ################ Choose K-fold cross-validation type ################
+        if not stratified:
+            outer_k_fold_splitter = KFold(n_splits=self.outer_loop_fold_count,
+                                    random_state=self.outer_loop_split_seed)
+            outer_split_kwargs = {}
+
+            inner_k_fold_splitter = KFold(
+                                        n_splits=self.inner_loop_fold_count,
+                                        random_state=self.inner_loop_split_seed)
+
+        else:
+            outer_k_fold_splitter = StratifiedKFold(
+                                n_splits=self.outer_loop_fold_count,
+                                random_state=self.outer_loop_split_seed)
+
+            outer_split_kwargs = {'y': y}
+
+            inner_k_fold_splitter = StratifiedKFold(
+                                        n_splits=self.inner_loop_fold_count,
+                                        random_state=self.inner_loop_split_seed)
+
+        ################ Calculate and save outer and inner fold split indices ################
+        for fold_id, (outer_train_inds, outer_test_inds) in enumerate(outer_k_fold_splitter.split(X,**outer_split_kwargs)):
+            self.outer_folds[fold_id] = OuterFoldInds(
+                                            fold_id=fold_id,
+                                            test_fold_inds=outer_test_inds,
+                                            train_fold_inds=outer_train_inds)
+
+            # Make sure the targets are available for a stratified run
+            if not stratified:
+                inner_split_kwargs = {}
+            else:
+                inner_split_kwargs = {'y': y[outer_train_inds]}
+
+            # Save inner fold test/train split indices
+            for inner_fold_id, (inner_train_inds, inner_test_inds) in enumerate(inner_k_fold_splitter.split(X[outer_train_inds],**inner_split_kwargs)):
+                self.outer_folds[fold_id].inner_folds[inner_fold_id] = \
+                    FoldInds(
+                        fold_id=inner_fold_id,
+                        test_fold_inds=inner_test_inds,
+                        train_fold_inds=inner_train_inds)
 
 # Define custom TSNE class so that it will work with pipeline
 class pipeline_TSNE(TSNE):
@@ -784,7 +917,7 @@ class PipelineOptimization:
         else:
             grid_search = GridSearchCV(pipeline,
                                        param_dist,
-                                       cv=cv, scoring=scoring,n_jobs=n_jobs)
+                                       cv=cv, scoring=scoring, n_jobs=n_jobs)
 
         # Perform grid search using above parameters
         grid_search.fit(X_train,y_train)
