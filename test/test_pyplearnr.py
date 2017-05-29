@@ -6,6 +6,8 @@ import pyplearnr as ppl
 
 import pandas as pd
 
+import itertools
+
 import unittest
 
 class AugmentedTestCase(unittest.TestCase):
@@ -19,6 +21,33 @@ class AugmentedTestCase(unittest.TestCase):
             # self.assertFail()
         except Exception as inst:
             self.assertEqual(inst.message, msg)
+
+    def get_cleaned_titanic_data(self):
+        # Read data into Pandas dataframe
+        df = pd.read_pickle('../trimmed_titanic_data.pkl')
+
+        simulation_df = df.copy()
+
+        # Set categorial features as such
+        categorical_features = ['Survived','Pclass','Sex','Embarked','Title']
+
+        for feature in categorical_features:
+            simulation_df[feature] = simulation_df[feature].astype('category')
+
+        # One-hot encode categorical features
+        simulation_df = pd.get_dummies(simulation_df,drop_first=True)
+
+        output_feature = 'Survived_1'
+
+        column_names = list(simulation_df.columns)
+
+        input_features = [x for x in column_names if x != output_feature]
+
+        # Split into features and targets
+        X = simulation_df[input_features].copy().values
+        y = simulation_df[output_feature].copy().values
+
+        return X, y
 
 class NestedKFoldCrossValidationTestCase(AugmentedTestCase):
     """
@@ -124,29 +153,8 @@ class NestedKFoldCrossValidationTestCase(AugmentedTestCase):
                                   [], kwargs)
 
     def test_get_outer_split_indices(self):
-        # Read data into Pandas dataframe
-        df = pd.read_pickle('../trimmed_titanic_data.pkl')
-
-        simulation_df = df.copy()
-
-        # Set categorial features as such
-        categorical_features = ['Survived','Pclass','Sex','Embarked','Title']
-
-        for feature in categorical_features:
-            simulation_df[feature] = simulation_df[feature].astype('category')
-
-        # One-hot encode categorical features
-        simulation_df = pd.get_dummies(simulation_df,drop_first=True)
-
-        output_feature = 'Survived_1'
-
-        column_names = list(simulation_df.columns)
-
-        input_features = [x for x in column_names if x != output_feature]
-
-        # Split into features and targets
-        X = simulation_df[input_features].copy().values
-        y = simulation_df[output_feature].copy().values
+        # Get data fit for testing
+        X, y = self.get_cleaned_titanic_data()
 
         # Obtain test/train split indices for outer and inner folds
         kfcv = ppl.NestedKFoldCrossValidation()
@@ -174,6 +182,32 @@ class NestedKFoldCrossValidationTestCase(AugmentedTestCase):
             self.assertTrue(not all_inner_test_inds-inner_test_inds_target)
 
         self.assertTrue(not all_outer_test_inds-outer_test_inds_target)
+
+    def test_fit(self):
+        # Get data fit for testing
+        X, y = self.get_cleaned_titanic_data()
+
+        # Obtain test/train split indices for outer and inner folds
+        kfcv = ppl.NestedKFoldCrossValidation()
+
+        estimators = ['logistic_regression','svm']
+
+        # feature_interaction_options = [True,False]
+        feature_selection_options = [None,'select_k_best']
+        scaling_options = [None,'standard','normal','min_max','binary']
+        transformations = [None,'pca']
+
+        pipeline_steps = [feature_selection_options,scaling_options,
+                          transformations,estimators]
+
+        pipeline_options = list(itertools.product(*pipeline_steps))
+
+
+
+
+        kfcv.fit(X, y, pipelines=[], stratified=True)
+
+
 
 
 

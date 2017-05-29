@@ -50,6 +50,12 @@ import sklearn.metrics as sklearn_metrics
 # Visualization
 import matplotlib.pylab as plt
 
+class PipelineBundle(object):
+    """
+    """
+    def __init__(self):
+        pass
+
 class FoldInds(object):
     """
     Class containing test/train split indices for inner folds of nest k-fold
@@ -156,22 +162,11 @@ class NestedKFoldCrossValidation(object):
             "inner_loop_split_seed keyword argument, dictating how the data "\
             "is split into folds for the inner loop, must be an integer."
 
-    def get_shuffled_data_inds(self, point_count):
+    def check_feature_target_data_consistent(self, X, y):
         """
-        Returns shuffled data indices given number of data points
+        Checks to make sure the feature matrix and target vector are of the
+        proper types and have the correct sizes
         """
-        shuffled_data_inds = np.arange(point_count)
-
-        np.random.shuffle(shuffled_data_inds)
-
-        return shuffled_data_inds
-
-    def get_outer_split_indices(self, X, y=None, stratified=False):
-        """
-        Returns test-fold indices given the feature matrix, X, optional target
-        values, y, and whether the split is to be stratified, stratified.
-        """
-        ################ Check inputs ###############
         assert type(X) is np.ndarray, "Feature matrix, X, must be of type " \
             "numpy.ndarray."
 
@@ -193,6 +188,59 @@ class NestedKFoldCrossValidation(object):
             assert X.shape[0] == y.shape[0], "The number of rows of the " \
                 "feature matrix, X, must match the length of the target " \
                 "value vector, y, if given."
+
+    def fit(self, X, y, pipelines, stratified=False):
+        """
+        Perform nested k-fold cross-validation on the data using the user-
+        provided pipelines
+        """
+        ############### Check inputs ###############
+        self.check_feature_target_data_consistent(X, y)
+
+        # TODO: add check for pipelines once this is working
+
+        point_count = X.shape[0]
+
+        # Get shuffle indices
+        if self.shuffle_flag:
+            self.shuffled_data_inds = self.get_shuffled_data_inds(point_count)
+        else:
+            # Make shuffle indices those which will result in same array if
+            # shuffling isnt desired
+            self.shuffled_data_inds = np.arange(point_count)
+
+        # Calculate outer and inner loop split indices
+        self.get_outer_split_indices(X, y=y, stratified=stratified)
+
+        # Perform nested k-fold cross-validation
+        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+            current_outer_test_fold_inds = outer_fold.test_fold_inds
+            current_outer_train_fold_inds = outer_fold.train_fold_inds
+
+            for inner_fold_ind, inner_fold in outer_fold.inner_folds.iteritems():
+                current_inner_test_fold_inds = inner_fold.test_fold_inds
+                current_inner_train_fold_inds = inner_fold.train_fold_inds
+
+                for pipeline in pipelines:
+                    print pipeline
+
+    def get_shuffled_data_inds(self, point_count):
+        """
+        Returns shuffled data indices given number of data points
+        """
+        shuffled_data_inds = np.arange(point_count)
+
+        np.random.shuffle(shuffled_data_inds)
+
+        return shuffled_data_inds
+
+    def get_outer_split_indices(self, X, y=None, stratified=False):
+        """
+        Returns test-fold indices given the feature matrix, X, optional target
+        values, y, and whether the split is to be stratified, stratified.
+        """
+        ################ Check inputs ###############
+        self.check_feature_target_data_consistent(X, y)
 
         assert type(stratified) is bool, "The keyword argument determining " \
             "whether the splits are to be stratified or not, stratified, must" \
@@ -256,8 +304,6 @@ class OptimizationBundle:
     methods to compare them.
     """
     def __init__(self):
-        """
-        """
         # Initialize fields
         self.X = None # Feature input data
         self.y = None # Feature target data
@@ -304,8 +350,8 @@ class OptimizationBundle:
             # Split data
             pass
 
-        pipeline_steps = [feature_interaction_options,feature_selection_options,scaling_options,
-                          transformations,estimators]
+        pipeline_steps = [feature_interaction_options, feature_selection_options,
+                          scaling_options, transformations, estimators]
 
         pipeline_options = list(itertools.product(*pipeline_steps))
 
