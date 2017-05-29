@@ -212,14 +212,39 @@ class NestedKFoldCrossValidation(object):
         # Calculate outer and inner loop split indices
         self.get_outer_split_indices(X, y=y, stratified=stratified)
 
+        # Shuffle data
+        print X.shape, y.shape
+        shuffled_X = X[self.shuffled_data_inds]
+        shuffled_y = y[self.shuffled_data_inds]
+        print shuffled_X.shape, shuffled_y.shape
+
         # Perform nested k-fold cross-validation
         for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
             current_outer_test_fold_inds = outer_fold.test_fold_inds
             current_outer_train_fold_inds = outer_fold.train_fold_inds
 
+            outer_loop_X_test = shuffled_X[current_outer_test_fold_inds]
+            outer_loop_y_test = shuffled_y[current_outer_test_fold_inds]
+
+            outer_loop_X_train = shuffled_X[current_outer_train_fold_inds]
+            outer_loop_y_train = shuffled_y[current_outer_train_fold_inds]
+
+            print '\t', outer_loop_X_test.shape, outer_loop_y_test.shape
+            print '\t', outer_loop_X_train.shape, outer_loop_y_train.shape
+
             for inner_fold_ind, inner_fold in outer_fold.inner_folds.iteritems():
                 current_inner_test_fold_inds = inner_fold.test_fold_inds
                 current_inner_train_fold_inds = inner_fold.train_fold_inds
+
+                inner_loop_X_test = outer_loop_X_train[current_inner_test_fold_inds]
+                inner_loop_y_test = outer_loop_y_train[current_inner_test_fold_inds]
+
+                inner_loop_X_train = outer_loop_X_train[current_inner_train_fold_inds]
+                inner_loop_y_train = outer_loop_y_train[current_inner_train_fold_inds]
+
+                print 2*'\t', inner_loop_X_test.shape, inner_loop_y_test.shape
+                print 2*'\t', inner_loop_X_train.shape, inner_loop_y_train.shape
+
 
                 for pipeline in pipelines:
                     print pipeline
