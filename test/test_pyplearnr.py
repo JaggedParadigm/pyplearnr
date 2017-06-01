@@ -292,6 +292,59 @@ class NestedKFoldCrossValidationTestCase(AugmentedTestCase):
         ............
         """
 
+        """
+        Alternate setup:
+
+        'scoring_metric': None,
+        best_pipeline = {
+            "trained_all_pipeline": None,
+            "mean_validation_score": None,
+            "validation_score_std": None
+        },
+        'outer_folds' = {
+            'id': None,
+            'test_inds': None,
+            'train_inds': None,
+
+            'best_pipeline': {
+                'best_pipeline_validation_score': None,
+
+            },
+
+
+
+
+
+            'pipelines': {
+                'id': {
+                    'id': None
+                    'mean_test_score': None,
+                    'test_score_std': None,
+                    'pipeline': None
+                }
+            }
+
+            'inner_folds': {
+                'id': None,
+                'test_fold_inds': None,
+                'train_fold_inds': None,
+                'pipelines': {
+                    'id': {
+                        'id': outer_inner_pipeline
+                        'test_score': None,
+                        'train_score': None,
+                        'pipeline': None
+                    }
+                }
+
+
+            },
+            ...
+            {},
+        }
+
+        """
+
 
 
 

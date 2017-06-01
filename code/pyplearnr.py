@@ -55,61 +55,7 @@ import sklearn.metrics as sklearn_metrics
 # Visualization
 import matplotlib.pylab as plt
 
-class BestPipeline(object):
-    """
-    Class containing data on the best pipeline from the nested k-fold cross-
-    validation run.
-    """
-    def __init__(self):
-        ############### Outline fields ###############
-        # Best pipeline, chosen from the inner k-fold cross-validation, trained
-        # on all of the data
-        self.trained_all_pipeline = None
 
-        # Statistics on the validation score of the best pipeline, chosen from
-        # the inner k-fold cross-validation, for each outer fold test/validation
-        # set
-        self.mean_validation_score = None
-        self.validation_score_std = None
-
-class BestOuterFoldPipeline(object):
-    """
-    Class containing best
-    """
-    def __init__(self):
-        ############### Outline fields ###############
-        self.outer_fold_id = None
-
-        self.best_pipeline_id = None
-
-        # Best pipeline from inner k-fold cross-validation trained on all of
-        # the inner fold data
-        self.trained_all_best_pipeline = None
-
-        self.validation_score = None
-
-        self.scoring_metric = None
-
-class OuterFoldPipelineCombo(object):
-    """
-    Class containing data corresponding to one particular outer fold and
-    scikit-learn pipeline combination for nested k-fold cross-validation.
-
-    The main point of this class is to store the data associated with the best
-    pipeline chosen from the inner k-fold cross validation.
-
-    """
-    def __init__(self):
-        ############### Outline fields ###############
-        self.id = None
-
-        # Score statistics from inner loop
-        self.mean_test_score = None
-        self.test_score_std = None
-        self.mean_train_score = None
-        self.train_score_std = None
-
-        self.scoring_metric = None
 
 class OuterFoldInnerFoldPipelineCombo(object):
     """
@@ -167,6 +113,172 @@ class OuterFoldInnerFoldPipelineCombo(object):
 
         return score
 
+class PipelineEvaluatory(object):
+    """
+    Class used to evaluate pipelines
+    """
+    def get_score(self, y, y_pred, scoring_metric):
+        """
+        Returns the score given target values, predicted values, and a scoring
+        metric.
+        """
+        if scoring_metric == 'auc':
+            # Get ROC curve points
+            false_positive_rate, true_positive_rate, _ = sklearn_metrics.roc_curve(y,
+                                                                                   y_pred)
+
+            # Calculate the area under the curve
+            score =  sklearn_metrics.auc(false_positive_rate, true_positive_rate)
+
+        return score
+
+
+class FoldInds(object):
+    """
+    Class containing test/train split indices for inner folds of nest k-fold
+    cross-validation run
+    """
+    def __init__(self, fold_id=None, test_fold_inds=None,
+                 train_fold_inds=None):
+        ############### Initialize fields ###############
+        self.fold_id = fold_id
+
+        self.test_fold_inds = test_fold_inds
+
+        self.train_fold_inds = train_fold_inds
+
+        self.pipelines = {}
+
+    def fit(self, inner_loop_X_train, inner_loop_y_train, inner_loop_X_test,
+            inner_loop_y_test, pipelines, scoring_metric='auc'):
+        """
+        Fits the pipeslines to the current inner fold training data
+        """
+        for pipeline_id, pipeline in pipelines.iteritems():
+            print 2*'\t', pipeline_id
+
+            # # Form id for this inner fold, outer fold, and pipeline
+            # # combination
+            # outer_inner_pipeline_id = "%d_%d_%d"%(outer_fold_ind,
+            #                                       inner_fold_ind,
+            #                                       pipeline_id)
+
+            # Initialize this combination
+            self.pipelines[pipeline_id] = {
+                'id': pipeline_id,
+                'test_score': None,
+                'train_score': None,
+                'pipeline': clone(pipeline, safe=True)
+            }
+
+            # Fit pipeline to training set of fold
+            self.pipelines[pipeline_id]['pipeline'].fit(inner_loop_X_train,
+                                                        inner_loop_y_train)
+
+            # Calculate predicted targets from input test data
+            inner_loop_y_test_pred = self.pipelines[pipeline_id]['pipeline'].predict(
+                                        inner_loop_X_test)
+
+            # Calculate the training prediction
+            inner_loop_y_train_pred = self.pipelines[pipeline_id]['pipeline'].predict(
+                                        inner_loop_X_train)
+
+            # Calculate train score
+            self.pipelines[pipeline_id]['train_score'] = PipelineEvaluatory().get_score(
+                                                        inner_loop_y_train,
+                                                        inner_loop_y_train_pred,
+                                                        scoring_metric)
+
+            # Calculate test score
+            self.pipelines[pipeline_id]['test_score'] = PipelineEvaluatory().get_score(
+                                                        inner_loop_y_test,
+                                                        inner_loop_y_test_pred,
+                                                        scoring_metric)
+
+            print 3*'\t', self.pipelines[pipeline_id]['train_score'], self.pipelines[pipeline_id]['test_score']
+
+class OuterFoldInds(FoldInds):
+    """
+    Class containing test/train split indices for data
+    """
+    def __init__(self, fold_id=None, test_fold_inds=None,
+                 train_fold_inds=None):
+        ############### Initialize fields ###############
+        super(OuterFoldInds, self).__init__(fold_id=fold_id,
+                                      test_fold_inds=test_fold_inds,
+                                      train_fold_inds=train_fold_inds)
+
+        # Folds for inner k-fold cross-validation
+        self.inner_folds = {}
+
+        self.pipelines = {}
+
+        self.best_pipeline = None
+
+    def fit(self, outer_loop_X_train, outer_loop_y_train, pipelines,
+            scoring_metric='auc'):
+        """
+        Performs inner loop of nested k-fold cross-validation for current outer
+        fold
+        """
+        # Fit all pipelines to the training set of each inner fold
+        for inner_fold_ind, inner_fold in self.inner_folds.iteritems():
+            print '\t', inner_fold.fold_id
+
+            current_inner_test_fold_inds = inner_fold.test_fold_inds
+            current_inner_train_fold_inds = inner_fold.train_fold_inds
+
+            inner_loop_X_test = outer_loop_X_train[current_inner_test_fold_inds]
+            inner_loop_y_test = outer_loop_y_train[current_inner_test_fold_inds]
+
+            inner_loop_X_train = outer_loop_X_train[current_inner_train_fold_inds]
+            inner_loop_y_train = outer_loop_y_train[current_inner_train_fold_inds]
+
+            inner_fold.fit(inner_loop_X_train, inner_loop_y_train,
+                           inner_loop_X_test, inner_loop_y_test, pipelines,
+                           scoring_metric=scoring_metric)
+
+        # Calculate and save means and standard deviations for train/test fold
+        # scores for each pipeline
+        max_score = -1e-14
+        max_ind = -1
+        for pipeline_id, pipeline in pipelines.iteritems():
+            # Initialize pipeline
+            self.pipelines[pipeline_id] = {
+                'id': pipeline_id,
+                'pipeline': clone(pipeline, safe=True),
+                'mean_test_score': None,
+                'median_test_score': None,
+                'test_score_std': None,
+                'mean_train_score': None,
+                'median_train_score': None,
+                'train_score_std': None
+            }
+
+            # Collect test and train scores
+            test_scores = []
+            train_scores = []
+            for inner_fold_ind in self.inner_folds:
+                test_scores.append(self.inner_folds[inner_fold_ind].pipelines[pipeline_id]['test_score'])
+                train_scores.append(self.inner_folds[inner_fold_ind].pipelines[pipeline_id]['train_score'])
+
+            # Calculate and save statistics on test and train scores
+            self.pipelines[pipeline_id]['mean_test_score'] = np.mean(test_scores)
+            self.pipelines[pipeline_id]['median_test_score'] = np.median(test_scores)
+            self.pipelines[pipeline_id]['test_score_std'] = np.std(test_scores,
+                                                                   ddof=1)
+
+            self.pipelines[pipeline_id]['mean_train_score'] = np.mean(train_scores)
+            self.pipelines[pipeline_id]['median_train_score'] = np.median(train_scores)
+            self.pipelines[pipeline_id]['train_score_std'] = np.std(train_scores,
+                                                                    ddof=1)
+
+            if max_score < self.pipelines[pipeline_id]['median_test_score']:
+                max_score = self.pipelines[pipeline_id]['median_test_score']
+                max_ind = pipeline_id
+
+
+
 class NestedKFoldCrossValidation(object):
     """
     Class that handles nested k-fold cross validation, whereby the inner loop
@@ -188,6 +300,8 @@ class NestedKFoldCrossValidation(object):
 
         self.pipelines = {pipeline_ind: pipeline for pipeline_ind, pipeline in enumerate(pipelines)}
 
+        self.scoring_metric = scoring_metric
+
         point_count = X.shape[0]
 
         # Get shuffle indices
@@ -207,6 +321,8 @@ class NestedKFoldCrossValidation(object):
 
         # Perform nested k-fold cross-validation
         for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+
+
             print outer_fold.fold_id
 
             current_outer_test_fold_inds = outer_fold.test_fold_inds
@@ -218,43 +334,11 @@ class NestedKFoldCrossValidation(object):
             outer_loop_X_train = shuffled_X[current_outer_train_fold_inds]
             outer_loop_y_train = shuffled_y[current_outer_train_fold_inds]
 
-            for inner_fold_ind, inner_fold in outer_fold.inner_folds.iteritems():
-                print '\t', inner_fold.fold_id
+            # Fit and score each pipeline on the inner folds of current
+            # outer fold
+            outer_fold.fit(outer_loop_X_train, outer_loop_y_train,
+                           self.pipelines, scoring_metric='auc')
 
-                current_inner_test_fold_inds = inner_fold.test_fold_inds
-                current_inner_train_fold_inds = inner_fold.train_fold_inds
-
-                inner_loop_X_test = outer_loop_X_train[current_inner_test_fold_inds]
-                inner_loop_y_test = outer_loop_y_train[current_inner_test_fold_inds]
-
-                inner_loop_X_train = outer_loop_X_train[current_inner_train_fold_inds]
-                inner_loop_y_train = outer_loop_y_train[current_inner_train_fold_inds]
-
-                for pipeline_id, pipeline in self.pipelines.iteritems():
-                    print 2*'\t', pipeline_id
-
-                    # Form id for this inner fold, outer fold, and pipeline
-                    # combination
-                    outer_inner_pipeline_id = "%d_%d_%d"%(outer_fold_ind,
-                                                          inner_fold_ind,
-                                                          pipeline_id)
-
-                    # Initialize this combination
-                    self.outer_inner_pipeline_combos[outer_inner_pipeline_id] = OuterFoldInnerFoldPipelineCombo(
-                                                                                    outer_inner_pipeline_id=outer_inner_pipeline_id,
-                                                                                    outer_fold_id=outer_fold_ind,
-                                                                                    inner_fold_id=inner_fold_ind,
-                                                                                    pipeline_id=pipeline_id,
-                                                                                    pipeline=clone(pipeline, safe=True))
-
-                    # Fit pipeline to training data of this outer/inner fold combo
-                    self.outer_inner_pipeline_combos[outer_inner_pipeline_id].fit(inner_loop_X_train,
-                                                                                  inner_loop_y_train,
-                                                                                  inner_loop_X_test,
-                                                                                  inner_loop_y_test,
-                                                                                  scoring_metric)
-
-                    print 3*'\t', self.outer_inner_pipeline_combos[outer_inner_pipeline_id].train_score, self.outer_inner_pipeline_combos[outer_inner_pipeline_id].test_score
 
     def __init__(self, outer_loop_fold_count=3, inner_loop_fold_count=3,
                  outer_loop_split_seed=None, inner_loop_split_seed=None,
@@ -577,34 +661,9 @@ class PipelineBundle(object):
         # Return defaults
         return pre_processing_grid_parameters,classifier_grid_parameters,regression_grid_parameters
 
-class FoldInds(object):
-    """
-    Class containing test/train split indices for inner folds of nest k-fold
-    cross-validation run
-    """
-    def __init__(self, fold_id=None, test_fold_inds=None,
-                 train_fold_inds=None):
-        ############### Initialize fields ###############
-        self.fold_id = fold_id
 
-        self.test_fold_inds = test_fold_inds
 
-        self.train_fold_inds = train_fold_inds
 
-class OuterFoldInds(FoldInds):
-    """
-    Class containing test/train split indices for data
-    """
-    def __init__(self, fold_id=None, test_fold_inds=None,
-                 train_fold_inds=None):
-        ############### Initialize fields ###############
-
-        super(OuterFoldInds, self).__init__(fold_id=fold_id,
-                                      test_fold_inds=test_fold_inds,
-                                      train_fold_inds=train_fold_inds)
-
-        # Folds for inner k-fold cross-validation
-        self.inner_folds = {}
 
 # Define custom TSNE class so that it will work with pipeline
 class pipeline_TSNE(TSNE):
