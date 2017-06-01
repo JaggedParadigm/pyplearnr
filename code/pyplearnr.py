@@ -37,10 +37,15 @@ from sklearn.linear_model import LinearRegression
 
 # Cross validation tools
 from sklearn.model_selection import train_test_split
+
 from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
+
 from sklearn.utils import shuffle
+
 from sklearn.pipeline import Pipeline
+from sklearn.base import clone
+
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import RandomizedSearchCV
 
@@ -50,40 +55,117 @@ import sklearn.metrics as sklearn_metrics
 # Visualization
 import matplotlib.pylab as plt
 
-class PipelineBundle(object):
+class BestPipeline(object):
     """
+    Class containing data on the best pipeline from the nested k-fold cross-
+    validation run.
     """
     def __init__(self):
-        pass
+        ############### Outline fields ###############
+        # Best pipeline, chosen from the inner k-fold cross-validation, trained
+        # on all of the data
+        self.trained_all_pipeline = None
 
-class FoldInds(object):
+        # Statistics on the validation score of the best pipeline, chosen from
+        # the inner k-fold cross-validation, for each outer fold test/validation
+        # set
+        self.mean_validation_score = None
+        self.validation_score_std = None
+
+class BestOuterFoldPipeline(object):
     """
-    Class containing test/train split indices for inner folds of nest k-fold
-    cross-validation run
+    Class containing best
     """
-    def __init__(self, fold_id=None, test_fold_inds=None,
-                 train_fold_inds=None):
+    def __init__(self):
+        ############### Outline fields ###############
+        self.outer_fold_id = None
+
+        self.best_pipeline_id = None
+
+        # Best pipeline from inner k-fold cross-validation trained on all of
+        # the inner fold data
+        self.trained_all_best_pipeline = None
+
+        self.validation_score = None
+
+        self.scoring_metric = None
+
+class OuterFoldPipelineCombo(object):
+    """
+    Class containing data corresponding to one particular outer fold and
+    scikit-learn pipeline combination for nested k-fold cross-validation.
+
+    The main point of this class is to store the data associated with the best
+    pipeline chosen from the inner k-fold cross validation.
+
+    """
+    def __init__(self):
+        ############### Outline fields ###############
+        self.id = None
+
+        # Score statistics from inner loop
+        self.mean_test_score = None
+        self.test_score_std = None
+        self.mean_train_score = None
+        self.train_score_std = None
+
+        self.scoring_metric = None
+
+class OuterFoldInnerFoldPipelineCombo(object):
+    """
+    Class containing data corresponding to one particular outer fold, inner
+    fold, scikit-learn pipeline combination for nested k-fold cross-validation
+    """
+    def __init__(self, outer_inner_pipeline_id=None, outer_fold_id=None, inner_fold_id=None,
+                 pipeline_id=None, pipeline=None):
         ############### Initialize fields ###############
-        self.fold_id = fold_id
+        self.id = outer_inner_pipeline_id
 
-        self.test_fold_inds = test_fold_inds
+        self.outer_fold_id = outer_fold_id
+        self.inner_fold_id = inner_fold_id
 
-        self.train_fold_inds = train_fold_inds
+        self.pipeline_id = pipeline_id
 
-class OuterFoldInds(FoldInds):
-    """
-    Class containing test/train split indices for data
-    """
-    def __init__(self, fold_id=None, test_fold_inds=None,
-                 train_fold_inds=None):
-        ############### Initialize fields ###############
+        self.pipeline = pipeline
 
-        super(OuterFoldInds, self).__init__(fold_id=fold_id,
-                                      test_fold_inds=test_fold_inds,
-                                      train_fold_inds=train_fold_inds)
+        self.test_score = None
+        self.train_score = None
+        self.scoring_metric = None
 
-        # Folds for inner k-fold cross-validation
-        self.inner_folds = {}
+    def fit(self, inner_loop_X_train, inner_loop_y_train, inner_loop_X_test,
+            inner_loop_y_test, scoring_metric):
+        # Fit pipeline to training data
+        self.pipeline.fit(inner_loop_X_train, inner_loop_y_train)
+
+        # Calculate predicted targets from input test data
+        inner_loop_y_test_pred = self.pipeline.predict(inner_loop_X_test)
+
+        # Calculate the training prediction
+        inner_loop_y_train_pred = self.pipeline.predict(inner_loop_X_train)
+
+        # Calculate scores
+        self.train_score = self.get_score(inner_loop_y_train,
+                                          inner_loop_y_train_pred,
+                                          scoring_metric)
+
+        self.test_score = self.get_score(inner_loop_y_test,
+                                         inner_loop_y_test_pred,
+                                         scoring_metric)
+
+    def get_score(self, y, y_pred, scoring_metric):
+        """
+        Returns the score given target values, predicted values, and a scoring
+        metric.
+        """
+        if scoring_metric == 'auc':
+            # Get ROC curve points
+            false_positive_rate, true_positive_rate, _ = sklearn_metrics.roc_curve(y,
+                                                                                   y_pred)
+
+            # Calculate the area under the curve
+            score =  sklearn_metrics.auc(false_positive_rate, true_positive_rate)
+
+        return score
 
 class NestedKFoldCrossValidation(object):
     """
@@ -91,6 +173,89 @@ class NestedKFoldCrossValidation(object):
     handles the model selection and the outer loop is used to provide an
     estimate of the chosen model's out of sample score.
     """
+    def fit(self, X, y, pipelines, stratified=False, scoring_metric='auc'):
+        """
+        Perform nested k-fold cross-validation on the data using the user-
+        provided pipelines
+        """
+        ############### Check inputs ###############
+        self.check_feature_target_data_consistent(X, y)
+
+        # TODO: add check for pipelines once this is working
+
+        self.X = X
+        self.y = y
+
+        self.pipelines = {pipeline_ind: pipeline for pipeline_ind, pipeline in enumerate(pipelines)}
+
+        point_count = X.shape[0]
+
+        # Get shuffle indices
+        if self.shuffle_flag:
+            self.shuffled_data_inds = self.get_shuffled_data_inds(point_count)
+        else:
+            # Make shuffle indices those which will result in same array if
+            # shuffling isnt desired
+            self.shuffled_data_inds = np.arange(point_count)
+
+        # Calculate outer and inner loop split indices
+        self.get_outer_split_indices(X, y=y, stratified=stratified)
+
+        # Shuffle data
+        shuffled_X = X[self.shuffled_data_inds]
+        shuffled_y = y[self.shuffled_data_inds]
+
+        # Perform nested k-fold cross-validation
+        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+            print outer_fold.fold_id
+
+            current_outer_test_fold_inds = outer_fold.test_fold_inds
+            current_outer_train_fold_inds = outer_fold.train_fold_inds
+
+            outer_loop_X_test = shuffled_X[current_outer_test_fold_inds]
+            outer_loop_y_test = shuffled_y[current_outer_test_fold_inds]
+
+            outer_loop_X_train = shuffled_X[current_outer_train_fold_inds]
+            outer_loop_y_train = shuffled_y[current_outer_train_fold_inds]
+
+            for inner_fold_ind, inner_fold in outer_fold.inner_folds.iteritems():
+                print '\t', inner_fold.fold_id
+
+                current_inner_test_fold_inds = inner_fold.test_fold_inds
+                current_inner_train_fold_inds = inner_fold.train_fold_inds
+
+                inner_loop_X_test = outer_loop_X_train[current_inner_test_fold_inds]
+                inner_loop_y_test = outer_loop_y_train[current_inner_test_fold_inds]
+
+                inner_loop_X_train = outer_loop_X_train[current_inner_train_fold_inds]
+                inner_loop_y_train = outer_loop_y_train[current_inner_train_fold_inds]
+
+                for pipeline_id, pipeline in self.pipelines.iteritems():
+                    print 2*'\t', pipeline_id
+
+                    # Form id for this inner fold, outer fold, and pipeline
+                    # combination
+                    outer_inner_pipeline_id = "%d_%d_%d"%(outer_fold_ind,
+                                                          inner_fold_ind,
+                                                          pipeline_id)
+
+                    # Initialize this combination
+                    self.outer_inner_pipeline_combos[outer_inner_pipeline_id] = OuterFoldInnerFoldPipelineCombo(
+                                                                                    outer_inner_pipeline_id=outer_inner_pipeline_id,
+                                                                                    outer_fold_id=outer_fold_ind,
+                                                                                    inner_fold_id=inner_fold_ind,
+                                                                                    pipeline_id=pipeline_id,
+                                                                                    pipeline=clone(pipeline, safe=True))
+
+                    # Fit pipeline to training data of this outer/inner fold combo
+                    self.outer_inner_pipeline_combos[outer_inner_pipeline_id].fit(inner_loop_X_train,
+                                                                                  inner_loop_y_train,
+                                                                                  inner_loop_X_test,
+                                                                                  inner_loop_y_test,
+                                                                                  scoring_metric)
+
+                    print 3*'\t', self.outer_inner_pipeline_combos[outer_inner_pipeline_id].train_score, self.outer_inner_pipeline_combos[outer_inner_pipeline_id].test_score
+
     def __init__(self, outer_loop_fold_count=3, inner_loop_fold_count=3,
                  outer_loop_split_seed=None, inner_loop_split_seed=None,
                  shuffle_flag=True, shuffle_seed=None):
@@ -132,10 +297,14 @@ class NestedKFoldCrossValidation(object):
         # Test/train fold indices
         self.outer_folds = {}
 
-        self.outer_loop_test_fold_indices = []
-        self.outer_loop_train_fold_indices = []
-        self.inner_loop_test_fold_indices = []
-        self.inner_loop_train_fold_indices = []
+        # Input data and targets
+        self.X = None
+        self.y = None
+
+        self.pipelines = None
+
+        # Combinations of an inner fold, an outer fold, and a pipeline
+        self.outer_inner_pipeline_combos = {}
 
         # Generate seed for initial shuffling of data if not provided
         if not self.shuffle_seed:
@@ -161,93 +330,6 @@ class NestedKFoldCrossValidation(object):
         assert type(self.inner_loop_split_seed) is int, "The " \
             "inner_loop_split_seed keyword argument, dictating how the data "\
             "is split into folds for the inner loop, must be an integer."
-
-    def check_feature_target_data_consistent(self, X, y):
-        """
-        Checks to make sure the feature matrix and target vector are of the
-        proper types and have the correct sizes
-        """
-        assert type(X) is np.ndarray, "Feature matrix, X, must be of type " \
-            "numpy.ndarray."
-
-        if y.any():
-            assert type(y) is np.ndarray, "Target vector, y, must be of type " \
-                "numpy.ndarray if given."
-
-            assert len(y.shape) == 1, "Target vector must have a flat shape. " \
-                "In other words the shape should be (m,) instead of (m,1) or " \
-                "(1,m)."
-
-        assert len(X.shape) == 2, "Feature matrix, X, must be 2-dimensional. " \
-            "If the intention was to have only one data point with a single " \
-            "value for each feature make the array (1,n). If there is only " \
-            "one feature make the array nx1 (instead of just having a shape " \
-            "of (n,))."
-
-        if y.any():
-            assert X.shape[0] == y.shape[0], "The number of rows of the " \
-                "feature matrix, X, must match the length of the target " \
-                "value vector, y, if given."
-
-    def fit(self, X, y, pipelines, stratified=False):
-        """
-        Perform nested k-fold cross-validation on the data using the user-
-        provided pipelines
-        """
-        ############### Check inputs ###############
-        self.check_feature_target_data_consistent(X, y)
-
-        # TODO: add check for pipelines once this is working
-
-        point_count = X.shape[0]
-
-        # Get shuffle indices
-        if self.shuffle_flag:
-            self.shuffled_data_inds = self.get_shuffled_data_inds(point_count)
-        else:
-            # Make shuffle indices those which will result in same array if
-            # shuffling isnt desired
-            self.shuffled_data_inds = np.arange(point_count)
-
-        # Calculate outer and inner loop split indices
-        self.get_outer_split_indices(X, y=y, stratified=stratified)
-
-        # Shuffle data
-        print X.shape, y.shape
-        shuffled_X = X[self.shuffled_data_inds]
-        shuffled_y = y[self.shuffled_data_inds]
-        print shuffled_X.shape, shuffled_y.shape
-
-        # Perform nested k-fold cross-validation
-        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
-            current_outer_test_fold_inds = outer_fold.test_fold_inds
-            current_outer_train_fold_inds = outer_fold.train_fold_inds
-
-            outer_loop_X_test = shuffled_X[current_outer_test_fold_inds]
-            outer_loop_y_test = shuffled_y[current_outer_test_fold_inds]
-
-            outer_loop_X_train = shuffled_X[current_outer_train_fold_inds]
-            outer_loop_y_train = shuffled_y[current_outer_train_fold_inds]
-
-            print '\t', outer_loop_X_test.shape, outer_loop_y_test.shape
-            print '\t', outer_loop_X_train.shape, outer_loop_y_train.shape
-
-            for inner_fold_ind, inner_fold in outer_fold.inner_folds.iteritems():
-                current_inner_test_fold_inds = inner_fold.test_fold_inds
-                current_inner_train_fold_inds = inner_fold.train_fold_inds
-
-                inner_loop_X_test = outer_loop_X_train[current_inner_test_fold_inds]
-                inner_loop_y_test = outer_loop_y_train[current_inner_test_fold_inds]
-
-                inner_loop_X_train = outer_loop_X_train[current_inner_train_fold_inds]
-                inner_loop_y_train = outer_loop_y_train[current_inner_train_fold_inds]
-
-                print 2*'\t', inner_loop_X_test.shape, inner_loop_y_test.shape
-                print 2*'\t', inner_loop_X_train.shape, inner_loop_y_train.shape
-
-
-                for pipeline in pipelines:
-                    print pipeline
 
     def get_shuffled_data_inds(self, point_count):
         """
@@ -317,6 +399,212 @@ class NestedKFoldCrossValidation(object):
                         fold_id=inner_fold_id,
                         test_fold_inds=inner_test_inds,
                         train_fold_inds=inner_train_inds)
+
+    def check_feature_target_data_consistent(self, X, y):
+        """
+        Checks to make sure the feature matrix and target vector are of the
+        proper types and have the correct sizes
+        """
+        assert type(X) is np.ndarray, "Feature matrix, X, must be of type " \
+            "numpy.ndarray."
+
+        if y.any():
+            assert type(y) is np.ndarray, "Target vector, y, must be of type " \
+                "numpy.ndarray if given."
+
+            assert len(y.shape) == 1, "Target vector must have a flat shape. " \
+                "In other words the shape should be (m,) instead of (m,1) or " \
+                "(1,m)."
+
+        assert len(X.shape) == 2, "Feature matrix, X, must be 2-dimensional. " \
+            "If the intention was to have only one data point with a single " \
+            "value for each feature make the array (1,n). If there is only " \
+            "one feature make the array nx1 (instead of just having a shape " \
+            "of (n,))."
+
+        if y.any():
+            assert X.shape[0] == y.shape[0], "The number of rows of the " \
+                "feature matrix, X, must match the length of the target " \
+                "value vector, y, if given."
+
+class PipelineBundle(object):
+    """
+    Collection of
+    """
+    def __init__(self):
+        pass
+
+    def build_pipeline_bundle(self, pipeline_bundle_schematic):
+        """
+        Returns a list of scikit-learn pipelines given a pipeline bundle
+        schematic.
+
+        TODO: Create a comprehensive description of the pipeline schematic
+
+        The general form of the pipeline bundle schematic is:
+
+        pipeline_bundle_schematic = [
+            step_1,
+            ...
+            step_n
+        ]
+
+        Steps take the form:
+
+        step_n = {
+            'step_n_type': {
+                'none': {}, # optional, used to not include the step as a permutation
+                step_n_option_1: {},
+            }
+
+
+        }
+
+        pipeline_bundle_schematic = [
+            {'step_1_type': {
+                'none': {}
+                'step_1': {
+                    'step_1_parameter_1': [step_1_parameter_1_value_1 ... step_1_parameter_1_value_p]
+                    ...
+                    'step_1_parameter_2': [step_1_parameter_2_value_1 ... step_1_parameter_2_value_m]
+                }
+            }},
+            ...
+        ]
+        """
+        # Get supported scikit-learn objects
+        sklearn_packages = self.get_supported_sklearn_objects()
+
+        # Obtain all corresponding scikit-learn package options with all
+        # parameter combinations for each step
+        pipeline_options = []
+        for x in pipeline_bundle_schematic:
+            step_name = x.keys()[0]
+
+            step_options = x[step_name]
+
+            step_iterations = []
+            for step_option, step_parameters in step_options.iteritems():
+                parameter_names = step_parameters.keys()
+
+                parameter_combos = [step_parameters[step_parameter_name] \
+                                    for step_parameter_name in parameter_names]
+
+                for parameter_combo in list(itertools.product(*parameter_combos)):
+                    parameter_kwargs = {pair[0]: pair[1] \
+                                        for pair in zip(parameter_names,
+                                                        parameter_combo)}
+
+                    if step_option != 'none':
+                        step = (step_name, sklearn_packages[step_name][step_option](**parameter_kwargs))
+
+                        step_iterations.append(step)
+
+            pipeline_options.append(step_iterations)
+
+        # Form all step/parameter permutations and convert to scikit-learn pipelines
+        pipelines = [Pipeline(x) for x in itertools.product(*pipeline_options)]
+
+        return pipelines
+
+    def get_supported_sklearn_objects(self):
+        """
+        Returns supported scikit-learn estimators, selectors, and transformers
+        """
+        sklearn_packages = {
+            'feature_selection': {
+                'select_k_best': SelectKBest
+            },
+            'scaler': {
+                'standard': StandardScaler,
+                'normal': Normalizer,
+                'min_max': MinMaxScaler,
+                'binary': Binarizer
+            },
+            'transform': {
+                'pca': PCA
+        #         't-sne': pipeline_TSNE(n_components=2, init='pca')
+            },
+            'estimator': {
+                'knn': KNeighborsClassifier,
+                'logistic_regression': LogisticRegression,
+                'svm': SVC,
+        #         'polynomial_regression': PolynomialFeatures(), Need to find a different solution for polynomial regression
+                'multilayer_perceptron': MLPClassifier,
+                'random_forest': RandomForestClassifier,
+                'adaboost': AdaBoostClassifier
+            }
+
+        }
+
+        return sklearn_packages
+
+    def get_default_pipeline_step_parameters(self,feature_count):
+        # Set pre-processing pipeline step parameters
+        pre_processing_grid_parameters = {
+            'select_k_best': {
+                'k': range(1,feature_count+1)
+            }
+        }
+
+        # Set classifier pipeline step parameters
+        classifier_grid_parameters = {
+            'knn': {
+                'n_neighbors': range(1,31),
+                'weights': ['uniform','distance']
+            },
+            'logistic_regression': {
+                'C': np.logspace(-10,10,5)
+            },
+            'svm': {},
+            'multilayer_perceptron': {
+                'hidden_layer_sizes': [[x] for x in range(min(3,feature_count),
+                                                          max(3,feature_count)+1)]
+            },
+            'random_forest': {
+                'n_estimators': range(90,100)
+            },
+            'adaboost': {}
+        }
+
+        # Set regression pipeline step parameters
+        regression_grid_parameters = {
+            'polynomial_regression': {
+                'degree': range(1,5)
+            }
+        }
+
+        # Return defaults
+        return pre_processing_grid_parameters,classifier_grid_parameters,regression_grid_parameters
+
+class FoldInds(object):
+    """
+    Class containing test/train split indices for inner folds of nest k-fold
+    cross-validation run
+    """
+    def __init__(self, fold_id=None, test_fold_inds=None,
+                 train_fold_inds=None):
+        ############### Initialize fields ###############
+        self.fold_id = fold_id
+
+        self.test_fold_inds = test_fold_inds
+
+        self.train_fold_inds = train_fold_inds
+
+class OuterFoldInds(FoldInds):
+    """
+    Class containing test/train split indices for data
+    """
+    def __init__(self, fold_id=None, test_fold_inds=None,
+                 train_fold_inds=None):
+        ############### Initialize fields ###############
+
+        super(OuterFoldInds, self).__init__(fold_id=fold_id,
+                                      test_fold_inds=test_fold_inds,
+                                      train_fold_inds=train_fold_inds)
+
+        # Folds for inner k-fold cross-validation
+        self.inner_folds = {}
 
 # Define custom TSNE class so that it will work with pipeline
 class pipeline_TSNE(TSNE):

@@ -49,6 +49,32 @@ class AugmentedTestCase(unittest.TestCase):
 
         return X, y
 
+class PipelineBundleTestCase(AugmentedTestCase):
+    """
+    Tests PipelineBundle methods
+    """
+    def test_build_bundle(self):
+        # Set test pipeline bundle schematic
+        pipeline_bundle_schematic = [
+            {'scaler': {
+                'standard': {},
+                'normal': {}
+            }},
+            {'estimator': {
+                'knn': {
+                    'n_neighbors': range(1,11),
+                    'weights': ['uniform', 'distance']
+                },
+                'svm': {
+                    'C': range(1,12)
+                }
+            }}
+        ]
+
+        pipelines = ppl.PipelineBundle().build_pipeline_bundle(pipeline_bundle_schematic)
+
+
+
 class NestedKFoldCrossValidationTestCase(AugmentedTestCase):
     """
     Tests NestedKFoldCrossValidation class
@@ -205,7 +231,66 @@ class NestedKFoldCrossValidationTestCase(AugmentedTestCase):
 
 
 
+
+
         kfcv.fit(X, y, pipelines=[], stratified=True)
+
+        """
+        best_pipeline = {
+            "trained_all_pipeline": None,
+            "mean_validation_score": None,
+            "validation_score_std": None
+        }
+
+        |   *    |           |           |
+            best_outer_fold_1_pipeline = {
+                "outer_fold_id": None
+                "best_pipeline_ind": None,
+                "trained_all_best_pipeline": None,
+                "validation_score": None,
+                "scoring_type": None
+
+            }
+            pipeline_1_outer_fold_1 = {
+                "id": None,
+                "mean_test_score": None,
+                "test_score_std": None,
+                "mean_train_score": None,
+                "train_score_std": None,
+                "scoring_type": None
+            }
+            pipeline_2_outer_fold_1
+            ....
+            pipeline_d_outer_fold_1
+
+                |   *  |      |         |
+                    pipeline_1_outer_fold_1_inner_fold_1 = {
+                        'id': None,
+                        'outer_fold_id': None,
+                        'inner_fold_id': None,
+                        'pipeline': None,
+                        'test_score': None,
+                        'train_score': None,
+                        'scoring_type': None,
+                    }
+                    pipeline_2_outer_fold_1_inner_fold_1
+                    ....
+                    pipeline_d_outer_fold_1_inner_fold_1
+                |      |   *  |         |
+                    pipeline_1_outer_fold_1_inner_fold_2
+                    pipeline_2_outer_fold_1_inner_fold_2
+                    ....
+                    pipeline_d_outer_fold_1_inner_fold_2
+                |      |      |    *    |
+                    pipeline_1_outer_fold_1_inner_fold_3
+                    pipeline_2_outer_fold_1_inner_fold_3
+                    ....
+                    pipeline_d_outer_fold_1_inner_fold_3
+        |       |      *     |            |
+        ............
+        |       |            |     *      |
+        ............
+        """
 
 
 
