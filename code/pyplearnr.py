@@ -57,63 +57,9 @@ import matplotlib.pylab as plt
 
 
 
-class OuterFoldInnerFoldPipelineCombo(object):
-    """
-    Class containing data corresponding to one particular outer fold, inner
-    fold, scikit-learn pipeline combination for nested k-fold cross-validation
-    """
-    def __init__(self, outer_inner_pipeline_id=None, outer_fold_id=None, inner_fold_id=None,
-                 pipeline_id=None, pipeline=None):
-        ############### Initialize fields ###############
-        self.id = outer_inner_pipeline_id
 
-        self.outer_fold_id = outer_fold_id
-        self.inner_fold_id = inner_fold_id
 
-        self.pipeline_id = pipeline_id
-
-        self.pipeline = pipeline
-
-        self.test_score = None
-        self.train_score = None
-        self.scoring_metric = None
-
-    def fit(self, inner_loop_X_train, inner_loop_y_train, inner_loop_X_test,
-            inner_loop_y_test, scoring_metric):
-        # Fit pipeline to training data
-        self.pipeline.fit(inner_loop_X_train, inner_loop_y_train)
-
-        # Calculate predicted targets from input test data
-        inner_loop_y_test_pred = self.pipeline.predict(inner_loop_X_test)
-
-        # Calculate the training prediction
-        inner_loop_y_train_pred = self.pipeline.predict(inner_loop_X_train)
-
-        # Calculate scores
-        self.train_score = self.get_score(inner_loop_y_train,
-                                          inner_loop_y_train_pred,
-                                          scoring_metric)
-
-        self.test_score = self.get_score(inner_loop_y_test,
-                                         inner_loop_y_test_pred,
-                                         scoring_metric)
-
-    def get_score(self, y, y_pred, scoring_metric):
-        """
-        Returns the score given target values, predicted values, and a scoring
-        metric.
-        """
-        if scoring_metric == 'auc':
-            # Get ROC curve points
-            false_positive_rate, true_positive_rate, _ = sklearn_metrics.roc_curve(y,
-                                                                                   y_pred)
-
-            # Calculate the area under the curve
-            score =  sklearn_metrics.auc(false_positive_rate, true_positive_rate)
-
-        return score
-
-class PipelineEvaluatory(object):
+class PipelineEvaluator(object):
     """
     Class used to evaluate pipelines
     """
@@ -184,13 +130,13 @@ class FoldInds(object):
                                         inner_loop_X_train)
 
             # Calculate train score
-            self.pipelines[pipeline_id]['train_score'] = PipelineEvaluatory().get_score(
+            self.pipelines[pipeline_id]['train_score'] = PipelineEvaluator().get_score(
                                                         inner_loop_y_train,
                                                         inner_loop_y_train_pred,
                                                         scoring_metric)
 
             # Calculate test score
-            self.pipelines[pipeline_id]['test_score'] = PipelineEvaluatory().get_score(
+            self.pipelines[pipeline_id]['test_score'] = PipelineEvaluator().get_score(
                                                         inner_loop_y_test,
                                                         inner_loop_y_test_pred,
                                                         scoring_metric)
@@ -276,8 +222,6 @@ class OuterFoldInds(FoldInds):
             if max_score < self.pipelines[pipeline_id]['median_test_score']:
                 max_score = self.pipelines[pipeline_id]['median_test_score']
                 max_ind = pipeline_id
-
-
 
 class NestedKFoldCrossValidation(object):
     """
