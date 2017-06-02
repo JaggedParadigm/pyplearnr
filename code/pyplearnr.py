@@ -158,12 +158,36 @@ class OuterFoldInds(FoldInds):
 
         self.best_pipeline = None
 
-    def fit(self, outer_loop_X_train, outer_loop_y_train, outer_loop_X_test,
-            outer_loop_y_test, pipelines, scoring_metric='auc'):
+    def fit(self, shuffled_X, shuffled_y, pipelines, scoring_metric='auc'):
         """
         Performs inner loop of nested k-fold cross-validation for current outer
         fold and returns the winner's index
         """
+        # current_outer_test_fold_inds = outer_fold.test_fold_inds
+        # current_outer_train_fold_inds = outer_fold.train_fold_inds
+        #
+        # outer_loop_X_test = self.shuffled_X[current_outer_test_fold_inds]
+        # outer_loop_y_test = self.shuffled_y[current_outer_test_fold_inds]
+        #
+        # outer_loop_X_train = self.shuffled_X[current_outer_train_fold_inds]
+        # outer_loop_y_train = self.shuffled_y[current_outer_train_fold_inds]
+        #
+        # # Fit and score each pipeline on the inner folds of current
+        # # outer fold, choose the winning pipeline, and save the winner
+        #
+        #
+        # outer_fold.fit(outer_loop_X_train, outer_loop_y_train,
+        #                outer_loop_X_test, outer_loop_y_test,
+        #                self.pipelines, scoring_metric='auc')
+
+
+        outer_loop_X_test = shuffled_X[self.test_fold_inds]
+        outer_loop_y_test = shuffled_y[self.test_fold_inds]
+
+        outer_loop_X_train = shuffled_X[self.train_fold_inds]
+        outer_loop_y_train = shuffled_y[self.train_fold_inds]
+
+
         # Fit all pipelines to the training set of each inner fold
         for inner_fold_ind, inner_fold in self.inner_folds.iteritems():
             print '\t', inner_fold.fold_id
@@ -291,39 +315,60 @@ class NestedKFoldCrossValidation(object):
         self.get_outer_split_indices(X, y=y, stratified=stratified)
 
         # Shuffle data
-        shuffled_X = X[self.shuffled_data_inds]
-        shuffled_y = y[self.shuffled_data_inds]
+        self.shuffled_X = X[self.shuffled_data_inds]
+        self.shuffled_y = y[self.shuffled_data_inds]
 
         # Perform nested k-fold cross-validation
         for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
-
-
             print outer_fold.fold_id
+            outer_fold.fit(self.shuffled_X, self.shuffled_y,
+                           self.pipelines, scoring_metric=scoring_metric)
 
-            current_outer_test_fold_inds = outer_fold.test_fold_inds
-            current_outer_train_fold_inds = outer_fold.train_fold_inds
 
-            outer_loop_X_test = shuffled_X[current_outer_test_fold_inds]
-            outer_loop_y_test = shuffled_y[current_outer_test_fold_inds]
 
-            outer_loop_X_train = shuffled_X[current_outer_train_fold_inds]
-            outer_loop_y_train = shuffled_y[current_outer_train_fold_inds]
-
-            # Fit and score each pipeline on the inner folds of current
-            # outer fold, choose the winning pipeline, and save the winner
-            outer_fold.fit(outer_loop_X_train, outer_loop_y_train,
-                           outer_loop_X_test, outer_loop_y_test,
-                           self.pipelines, scoring_metric='auc')
+            # current_outer_test_fold_inds = outer_fold.test_fold_inds
+            # current_outer_train_fold_inds = outer_fold.train_fold_inds
+            #
+            # outer_loop_X_test = self.shuffled_X[current_outer_test_fold_inds]
+            # outer_loop_y_test = self.shuffled_y[current_outer_test_fold_inds]
+            #
+            # outer_loop_X_train = self.shuffled_X[current_outer_train_fold_inds]
+            # outer_loop_y_train = self.shuffled_y[current_outer_train_fold_inds]
+            #
+            # # Fit and score each pipeline on the inner folds of current
+            # # outer fold, choose the winning pipeline, and save the winner
+            #
+            #
+            # outer_fold.fit(outer_loop_X_train, outer_loop_y_train,
+            #                outer_loop_X_test, outer_loop_y_test,
+            #                self.pipelines, scoring_metric='auc')
 
         self.pick_winning_pipeline()
 
-    def set_winning_pipeline(self, winning_pipeline_ind):
+    def train_winning_pipeline(self, winning_pipeline_ind):
         """
         Simply sets the index of the best pipeline
         """
         self.best_pipeline["best_pipeline_ind"] = winning_pipeline_ind
 
-    def pick_winning_pipeline(self):
+        # Clone winning pipeline
+        self.best_pipeline["trained_all_pipeline"] = clone(
+            self.pipelines[winning_pipeline_ind], safe=True
+            )
+
+        # Train winning pipeline
+        # for outer_fold in self.outer_folds:
+        #     outer_fold.
+
+
+        self.best_pipeline = {
+            "best_pipeline_ind": None,
+            "trained_all_pipeline": None,
+            "mean_validation_score": None,
+            "validation_score_std": None
+        }
+
+    def pick_winning_pipeline(self, tie_breaker='choice'):
         """
         Chooses winner of nested k-fold cross-validation as the majority vote of
         each outer fold winner
@@ -341,15 +386,20 @@ class NestedKFoldCrossValidation(object):
         mode_inds = [x for x, count in counts.iteritems() if count==max_count]
 
         if len(mode_inds) == 1:
-            self.set_winning_pipeline(mode_inds[0])
+            self.train_winning_pipeline(mode_inds[0])
         else:
-            # Encourage user to choose simplest model if there is no clear
-            # winner
-            for mode_ind in mode_inds:
-                print mode_ind, self.pipelines[mode_ind]
-            print "\n\nNo model was chosen because there is no clear winner. " \
-                  "Please use the set_winning_pipeline method with one of the "\
-                  "indices above.\n"
+            if tie_breaker=='choice':
+                # Encourage user to choose simplest model if there is no clear
+                # winner
+                for mode_ind in mode_inds:
+                    print mode_ind, self.pipelines[mode_ind]
+                print "\n\nNo model was chosen because there is no clear winner. " \
+                      "Please use the train_winning_pipeline method with one of the "\
+                      "indices above.\n\nExample:\tkfcv.fit(X.values, " \
+                      "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"
+            elif tie_breaker=='first':
+                # Just set index to first mode
+                self.train_winning_pipeline(mode_inds[0])
 
     def __init__(self, outer_loop_fold_count=3, inner_loop_fold_count=3,
                  outer_loop_split_seed=None, inner_loop_split_seed=None,
@@ -396,17 +446,20 @@ class NestedKFoldCrossValidation(object):
         self.X = None
         self.y = None
 
+        # Shuffled data and targets
+        self.shuffled_X = None
+        self.shuffled_y = None
+
+        # Pipelines
         self.pipelines = None
 
+        # Winning pipeline for the entire process
         self.best_pipeline = {
             "best_pipeline_ind": None,
             "trained_all_pipeline": None,
             "mean_validation_score": None,
             "validation_score_std": None
         }
-
-        # Combinations of an inner fold, an outer fold, and a pipeline
-        self.outer_inner_pipeline_combos = {}
 
         # Generate seed for initial shuffling of data if not provided
         if not self.shuffle_seed:
