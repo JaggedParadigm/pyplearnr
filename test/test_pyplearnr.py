@@ -249,7 +249,6 @@ class NestedKFoldCrossValidationTestCase(AugmentedTestCase):
                 "trained_all_best_pipeline": None,
                 "validation_score": None,
                 "scoring_type": None
-
             }
             pipeline_1_outer_fold_1 = {
                 "id": None,
