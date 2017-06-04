@@ -56,335 +56,12 @@ import sklearn.metrics as sklearn_metrics
 # Visualization
 import matplotlib.pylab as plt
 
-class PipelineEvaluator(object):
-    """
-    Class used to evaluate pipelines
-    """
-    def get_score(self, y, y_pred, scoring_metric):
-        """
-        Returns the score given target values, predicted values, and a scoring
-        metric.
-        """
-        if scoring_metric == 'auc':
-            # Get ROC curve points
-            false_positive_rate, true_positive_rate, _ = sklearn_metrics.roc_curve(y,
-                                                                                   y_pred)
-
-            # Calculate the area under the curve
-            score =  sklearn_metrics.auc(false_positive_rate, true_positive_rate)
-
-        return score
-
-
-class FoldInds(object):
-    """
-    Class containing test/train split indices for inner folds of nest k-fold
-    cross-validation run
-    """
-    def __init__(self, fold_id=None, test_fold_inds=None,
-                 train_fold_inds=None):
-        ############### Initialize fields ###############
-        self.fold_id = fold_id
-
-        self.test_fold_inds = test_fold_inds
-
-        self.train_fold_inds = train_fold_inds
-
-        self.X_test = None
-        self.y_test = None
-
-        self.X_train = None
-        self.y_train = None
-
-        self.pipelines = {}
-
-    def fit(self, outer_loop_X_train, outer_loop_y_train, pipelines,
-            scoring_metric='auc'):
-        """
-        Fits the pipeslines to the current inner fold training data
-        """
-        self.X_test = outer_loop_X_train[self.test_fold_inds]
-        self.y_test = outer_loop_y_train[self.test_fold_inds]
-
-        self.X_train = outer_loop_X_train[self.train_fold_inds]
-        self.y_train = outer_loop_y_train[self.train_fold_inds]
-
-
-        for pipeline_id, pipeline in pipelines.iteritems():
-            print 2*'\t', pipeline_id
-
-            # Initialize this combination
-            self.pipelines[pipeline_id] = {
-                'id': pipeline_id,
-                'y_test_pred': None,
-                'y_train_pred': None,
-                'test_score': None,
-                'train_score': None,
-                'pipeline': clone(pipeline, safe=True)
-            }
-
-            # Fit pipeline to training set of fold
-            self.pipelines[pipeline_id]['pipeline'].fit(self.X_train,
-                                                        self.y_train
-                                                        )
-
-            # Calculate predicted targets from input test data
-            self.pipelines[pipeline_id]['y_test_pred'] = \
-                self.pipelines[pipeline_id]['pipeline'].predict(self.X_test)
-
-            # Calculate the training prediction for this model
-            self.pipelines[pipeline_id]['y_train_pred'] = \
-                self.pipelines[pipeline_id]['pipeline'].predict(self.X_train)
-
-            # Calculate train score
-            self.pipelines[pipeline_id]['train_score'] = \
-                PipelineEvaluator().get_score(
-                    self.y_train,
-                    self.pipelines[pipeline_id]['y_train_pred'],
-                    scoring_metric
-                    )
-
-            # Calculate test score
-            self.pipelines[pipeline_id]['test_score'] = \
-                PipelineEvaluator().get_score(
-                    self.y_test,
-                    self.pipelines[pipeline_id]['y_test_pred'],
-                    scoring_metric
-                    )
-
-            print 3*'\t', self.pipelines[pipeline_id]['train_score'], self.pipelines[pipeline_id]['test_score']
-
-class OuterFoldInds(FoldInds):
-    """
-    Class containing test/train split indices for data
-    """
-    def __init__(self, fold_id=None, test_fold_inds=None,
-                 train_fold_inds=None):
-        ############### Initialize fields ###############
-        super(OuterFoldInds, self).__init__(fold_id=fold_id,
-                                      test_fold_inds=test_fold_inds,
-                                      train_fold_inds=train_fold_inds)
-
-        # Folds for inner k-fold cross-validation
-        self.inner_folds = {}
-
-        self.pipelines = {}
-
-        self.X_test = None
-        self.y_test = None
-
-        self.X_train = None
-        self.y_train = None
-
-        self.best_pipeline = None
-
-    def fit(self, shuffled_X, shuffled_y, pipelines, scoring_metric='auc'):
-        """
-        Performs inner loop of nested k-fold cross-validation for current outer
-        fold and returns the winner's index
-        """
-        self.X_test = shuffled_X[self.test_fold_inds]
-        self.y_test = shuffled_y[self.test_fold_inds]
-
-        self.X_train = shuffled_X[self.train_fold_inds]
-        self.y_train = shuffled_y[self.train_fold_inds]
-
-        # Fit all pipelines to the training set of each inner fold and Calculate
-        # inner training and test scores
-        for inner_fold_ind, inner_fold in self.inner_folds.iteritems():
-            print '\t', inner_fold.fold_id
-
-            inner_fold.fit(self.X_train, self.y_train, pipelines,
-                           scoring_metric=scoring_metric)
-
-        # Calculate and save statistics for train/test fold scores for each
-        # pipeline and find the that withthe maximum median
-        max_score = -1e14
-        max_ind = -1
-        for pipeline_id, pipeline in pipelines.iteritems():
-            # Initialize pipeline
-            self.pipelines[pipeline_id] = {
-                'id': pipeline_id,
-                'pipeline': clone(pipeline, safe=True),
-                'mean_test_score': None,
-                'median_test_score': None,
-                'test_score_std': None,
-                'mean_train_score': None,
-                'median_train_score': None,
-                'train_score_std': None
-            }
-
-            # Collect test and train scores
-            test_scores = []
-            train_scores = []
-            for inner_fold_ind, inner_fold in self.inner_folds.iteritems():
-                test_scores.append(
-                    inner_fold.pipelines[pipeline_id]['test_score'])
-                train_scores.append(
-                    inner_fold.pipelines[pipeline_id]['train_score']
-                    )
-
-            # Calculate and save statistics on test and train scores
-            self.pipelines[pipeline_id]['mean_test_score'] = \
-                np.mean(test_scores)
-            self.pipelines[pipeline_id]['median_test_score'] = \
-                np.median(test_scores)
-            self.pipelines[pipeline_id]['test_score_std'] = np.std(test_scores,
-                                                                   ddof=1)
-
-            self.pipelines[pipeline_id]['mean_train_score'] = \
-                np.mean(train_scores)
-            self.pipelines[pipeline_id]['median_train_score'] = \
-                np.median(train_scores)
-            self.pipelines[pipeline_id]['train_score_std'] = \
-                np.std(train_scores,ddof=1)
-
-            # Find highest score and corresponding pipeline index
-            if max_score < self.pipelines[pipeline_id]['median_test_score']:
-                max_score = self.pipelines[pipeline_id]['median_test_score']
-                max_ind = pipeline_id
-
-        print max_score, max_ind
-
-        # Pick and save best pipline for this outer fold
-        self.best_pipeline = {
-            "best_pipeline_ind": max_ind,
-            "trained_all_best_pipeline": clone(pipelines[max_ind], safe=True),
-            "y_train_pred": None,
-            "y_test_pred": None,
-            "train_score": None,
-            "validation_score": None,
-            "scoring_metric": scoring_metric
-        }
-
-        # Train on all inner loop training data
-        self.best_pipeline['trained_all_best_pipeline'].fit(self.X_train,
-                                                            self.y_train)
-
-        # Form predictions for testing and training targets
-        self.best_pipeline['y_test_pred'] = \
-            self.best_pipeline['trained_all_best_pipeline'].predict(self.X_test)
-        self.best_pipeline['y_train_pred'] = \
-            self.best_pipeline['trained_all_best_pipeline'].predict(self.X_train)
-
-        # Calculate outer loop training score
-        self.best_pipeline['train_score'] = \
-            PipelineEvaluator().get_score(self.y_train,
-                                          self.best_pipeline['y_train_pred'],
-                                          scoring_metric)
-
-        # Calculate validation score
-        self.best_pipeline['validation_score'] = \
-            PipelineEvaluator().get_score(self.y_test,
-                                          self.best_pipeline['y_test_pred'],
-                                          scoring_metric)
-
-        print self.best_pipeline['validation_score'], self.best_pipeline['train_score']
-
 class NestedKFoldCrossValidation(object):
     """
     Class that handles nested k-fold cross validation, whereby the inner loop
     handles the model selection and the outer loop is used to provide an
     estimate of the chosen model's out of sample score.
     """
-    def fit(self, X, y, pipelines, stratified=False, scoring_metric='auc'):
-        """
-        Perform nested k-fold cross-validation on the data using the user-
-        provided pipelines
-        """
-        ############### Check inputs ###############
-        self.check_feature_target_data_consistent(X, y)
-
-        # TODO: add check for pipelines once this is working
-
-        self.X = X
-        self.y = y
-
-        self.pipelines = {pipeline_ind: pipeline for pipeline_ind, pipeline in enumerate(pipelines)}
-
-        self.scoring_metric = scoring_metric
-
-        point_count = X.shape[0]
-
-        # Get shuffle indices
-        if self.shuffle_flag:
-            self.shuffled_data_inds = self.get_shuffled_data_inds(point_count)
-        else:
-            # Make shuffle indices those which will result in same array if
-            # shuffling isnt desired
-            self.shuffled_data_inds = np.arange(point_count)
-
-        # Calculate outer and inner loop split indices
-        self.get_outer_split_indices(X, y=y, stratified=stratified)
-
-        # Shuffle data
-        self.shuffled_X = X[self.shuffled_data_inds]
-        self.shuffled_y = y[self.shuffled_data_inds]
-
-        # Perform nested k-fold cross-validation
-        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
-            print outer_fold.fold_id
-            outer_fold.fit(self.shuffled_X, self.shuffled_y,
-                           self.pipelines, scoring_metric=scoring_metric)
-
-        self.pick_winning_pipeline()
-
-    def train_winning_pipeline(self, winning_pipeline_ind):
-        """
-        Simply sets the index of the best pipeline
-        """
-        self.best_pipeline["best_pipeline_ind"] = winning_pipeline_ind
-
-        # Clone winning pipeline
-        self.best_pipeline["trained_all_pipeline"] = clone(
-            self.pipelines[winning_pipeline_ind], safe=True
-            )
-
-        # # Train winning pipeline
-        # for outer_fold in self.outer_folds:
-        #     outer_fold.
-
-
-        self.best_pipeline = {
-            "best_pipeline_ind": None,
-            "trained_all_pipeline": None,
-            "mean_validation_score": None,
-            "validation_score_std": None
-        }
-
-    def pick_winning_pipeline(self, tie_breaker='choice'):
-        """
-        Chooses winner of nested k-fold cross-validation as the majority vote of
-        each outer fold winner
-        """
-        # Collect all winning pipelines in for inner loop contest of each outer
-        # fold
-        outer_fold_winners = [outer_fold.best_pipeline['best_pipeline_ind'] \
-                              for outer_fold_ind, outer_fold in self.outer_folds.iteritems()]
-
-        # Determine winner of all folds by majority vote
-        counts = {x: outer_fold_winners.count(x) for x in outer_fold_winners}
-
-        max_count = max([count for x, count in counts.iteritems()])
-
-        mode_inds = [x for x, count in counts.iteritems() if count==max_count]
-
-        if len(mode_inds) == 1:
-            self.train_winning_pipeline(mode_inds[0])
-        else:
-            if tie_breaker=='choice':
-                # Encourage user to choose simplest model if there is no clear
-                # winner
-                for mode_ind in mode_inds:
-                    print mode_ind, self.pipelines[mode_ind]
-                print "\n\nNo model was chosen because there is no clear winner. " \
-                      "Please use the train_winning_pipeline method with one of the "\
-                      "indices above.\n\nExample:\tkfcv.fit(X.values, " \
-                      "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"
-            elif tie_breaker=='first':
-                # Just set index to first mode
-                self.train_winning_pipeline(mode_inds[0])
-
     def __init__(self, outer_loop_fold_count=3, inner_loop_fold_count=3,
                  outer_loop_split_seed=None, inner_loop_split_seed=None,
                  shuffle_flag=True, shuffle_seed=None):
@@ -469,6 +146,144 @@ class NestedKFoldCrossValidation(object):
         assert type(self.inner_loop_split_seed) is int, "The " \
             "inner_loop_split_seed keyword argument, dictating how the data "\
             "is split into folds for the inner loop, must be an integer."
+
+    def fit(self, X, y, pipelines, stratified=False, scoring_metric='auc'):
+        """
+        Perform nested k-fold cross-validation on the data using the user-
+        provided pipelines
+        """
+        ############### Check inputs ###############
+        self.check_feature_target_data_consistent(X, y)
+
+        # TODO: add check for pipelines once this is working
+
+        self.X = X
+        self.y = y
+
+        self.pipelines = {pipeline_ind: pipeline for pipeline_ind, pipeline in enumerate(pipelines)}
+
+        self.scoring_metric = scoring_metric
+
+        point_count = X.shape[0]
+
+        # Get shuffle indices
+        if self.shuffle_flag:
+            self.shuffled_data_inds = self.get_shuffled_data_inds(point_count)
+        else:
+            # Make shuffle indices those which will result in same array if
+            # shuffling isnt desired
+            self.shuffled_data_inds = np.arange(point_count)
+
+        # Calculate outer and inner loop split indices
+        self.get_outer_split_indices(X, y=y, stratified=stratified)
+
+        # Shuffle data
+        self.shuffled_X = X[self.shuffled_data_inds]
+        self.shuffled_y = y[self.shuffled_data_inds]
+
+        # Perform nested k-fold cross-validation
+        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+            outer_fold.fit(self.shuffled_X, self.shuffled_y,
+                           self.pipelines, scoring_metric=scoring_metric)
+
+        self.pick_winning_pipeline()
+
+    def train_winning_pipeline(self, winning_pipeline_ind):
+        """
+        Simply sets the index of the best pipeline and trains it on all of the
+        training data.
+        """
+        # Make sure the pipeline that won has its validation score set in each
+        # outer fold
+        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+            winning_pipeline = outer_fold.pipelines[winning_pipeline_ind]
+
+            validation_score = winning_pipeline['validation_score']
+
+            if not validation_score:
+                pass
+
+
+            # outer_fold.pipelines[]
+
+        """
+        self.pipelines[pipeline_id] = {
+            'id': pipeline_id,
+
+            'pipeline': clone(pipeline, safe=True),
+
+            'mean_inner_test_score': None,
+            'median_inner_test_score': None,
+            'inner_test_score_std': None,
+
+            'mean_inner_train_score': None,
+            'median_inner_train_score': None,
+            'inner_train_score_std': None,
+
+            'all_trained_pipeline': None,
+
+            'y_validation_pred': None,
+            'validation_score': None,
+
+            'outer_y_train_pred': None,
+            'outer_train_score': None,
+
+            'scoring_metric': None
+        }
+
+        """
+
+        # self.best_pipeline["best_pipeline_ind"] = winning_pipeline_ind
+        #
+        # # Clone winning pipeline
+        # self.best_pipeline["trained_all_pipeline"] = clone(
+        #     self.pipelines[winning_pipeline_ind], safe=True
+        #     )
+        #
+        # # # Train winning pipeline
+        # # for outer_fold in self.outer_folds:
+        # #     outer_fold.
+        #
+        #
+        # self.best_pipeline = {
+        #     "best_pipeline_ind": None,
+        #     "trained_all_pipeline": None,
+        #     "mean_validation_score": None,
+        #     "validation_score_std": None
+        # }
+
+    def pick_winning_pipeline(self, tie_breaker='choice'):
+        """
+        Chooses winner of nested k-fold cross-validation as the majority vote of
+        each outer fold winner
+        """
+        # Collect all winning pipelines in for inner loop contest of each outer
+        # fold
+        outer_fold_winners = [outer_fold.best_pipeline_ind \
+                              for outer_fold_ind, outer_fold in self.outer_folds.iteritems()]
+
+        # Determine winner of all folds by majority vote
+        counts = {x: outer_fold_winners.count(x) for x in outer_fold_winners}
+
+        max_count = max([count for x, count in counts.iteritems()])
+
+        mode_inds = [x for x, count in counts.iteritems() if count==max_count]
+
+        if len(mode_inds) == 1:
+            self.train_winning_pipeline(mode_inds[0])
+        else:
+            if tie_breaker=='choice':
+                # Encourage user to choose simplest model if there is no clear
+                # winner
+                for mode_ind in mode_inds:
+                    print mode_ind, self.pipelines[mode_ind]
+                print "\n\nNo model was chosen because there is no clear winner. " \
+                      "Please use the train_winning_pipeline method with one of the "\
+                      "indices above.\n\nExample:\tkfcv.fit(X.values, " \
+                      "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"
+            elif tie_breaker=='first':
+                # Just set index to first mode
+                self.train_winning_pipeline(mode_inds[0])
 
     def get_shuffled_data_inds(self, point_count):
         """
@@ -565,6 +380,223 @@ class NestedKFoldCrossValidation(object):
             assert X.shape[0] == y.shape[0], "The number of rows of the " \
                 "feature matrix, X, must match the length of the target " \
                 "value vector, y, if given."
+
+class FoldInds(object):
+    """
+    Class containing test/train split indices for inner folds of nest k-fold
+    cross-validation run
+    """
+    def __init__(self, fold_id=None, test_fold_inds=None,
+                 train_fold_inds=None):
+        ############### Initialize fields ###############
+        self.fold_id = fold_id
+
+        self.test_fold_inds = test_fold_inds
+
+        self.train_fold_inds = train_fold_inds
+
+        self.X_test = None
+        self.y_test = None
+
+        self.X_train = None
+        self.y_train = None
+
+        self.pipelines = {}
+
+    def fit(self, outer_loop_X_train, outer_loop_y_train, pipelines,
+            scoring_metric='auc'):
+        """
+        Fits the pipeslines to the current inner fold training data
+        """
+        self.X_test = outer_loop_X_train[self.test_fold_inds]
+        self.y_test = outer_loop_y_train[self.test_fold_inds]
+
+        self.X_train = outer_loop_X_train[self.train_fold_inds]
+        self.y_train = outer_loop_y_train[self.train_fold_inds]
+
+        for pipeline_id, pipeline in pipelines.iteritems():
+            # Initialize this combination
+            self.pipelines[pipeline_id] = {
+                'id': pipeline_id,
+                'y_test_pred': None,
+                'y_train_pred': None,
+                'test_score': None,
+                'train_score': None,
+                'pipeline': clone(pipeline, safe=True)
+            }
+
+            # Fit pipeline to training set of fold
+            self.pipelines[pipeline_id]['pipeline'].fit(self.X_train,
+                                                        self.y_train
+                                                        )
+
+            # Calculate predicted targets from input test data
+            self.pipelines[pipeline_id]['y_test_pred'] = \
+                self.pipelines[pipeline_id]['pipeline'].predict(self.X_test)
+
+            # Calculate the training prediction for this model
+            self.pipelines[pipeline_id]['y_train_pred'] = \
+                self.pipelines[pipeline_id]['pipeline'].predict(self.X_train)
+
+            # Calculate train score
+            self.pipelines[pipeline_id]['train_score'] = \
+                PipelineEvaluator().get_score(
+                    self.y_train,
+                    self.pipelines[pipeline_id]['y_train_pred'],
+                    scoring_metric
+                    )
+
+            # Calculate test score
+            self.pipelines[pipeline_id]['test_score'] = \
+                PipelineEvaluator().get_score(
+                    self.y_test,
+                    self.pipelines[pipeline_id]['y_test_pred'],
+                    scoring_metric
+                    )
+
+class OuterFoldInds(FoldInds):
+    """
+    Class containing test/train split indices for data
+    """
+    def __init__(self, fold_id=None, test_fold_inds=None,
+                 train_fold_inds=None):
+        ############### Initialize fields ###############
+        super(OuterFoldInds, self).__init__(fold_id=fold_id,
+                                      test_fold_inds=test_fold_inds,
+                                      train_fold_inds=train_fold_inds)
+
+        # Folds for inner k-fold cross-validation
+        self.inner_folds = {}
+
+        self.best_pipeline_ind = None
+
+    def fit(self, shuffled_X, shuffled_y, pipelines, scoring_metric='auc'):
+        """
+        Performs inner loop of nested k-fold cross-validation for current outer
+        fold and returns the winner's index
+        """
+        self.X_test = shuffled_X[self.test_fold_inds]
+        self.y_test = shuffled_y[self.test_fold_inds]
+
+        self.X_train = shuffled_X[self.train_fold_inds]
+        self.y_train = shuffled_y[self.train_fold_inds]
+
+        # Fit all pipelines to the training set of each inner fold and Calculate
+        # inner training and test scores
+        for inner_fold_ind, inner_fold in self.inner_folds.iteritems():
+            inner_fold.fit(self.X_train, self.y_train, pipelines,
+                           scoring_metric=scoring_metric)
+
+        # Calculate and save statistics for train/test fold scores for each
+        # pipeline and find the that withthe maximum median
+        max_score = -1e14
+        max_ind = -1
+        for pipeline_id, pipeline in pipelines.iteritems():
+            # Initialize pipeline
+            self.pipelines[pipeline_id] = {
+                'id': pipeline_id,
+
+                'pipeline': clone(pipeline, safe=True),
+
+                'mean_inner_test_score': None,
+                'median_inner_test_score': None,
+                'inner_test_score_std': None,
+
+                'mean_inner_train_score': None,
+                'median_inner_train_score': None,
+                'inner_train_score_std': None,
+
+                'all_trained_pipeline': None,
+
+                'y_validation_pred': None,
+                'validation_score': None,
+
+                'outer_y_train_pred': None,
+                'outer_train_score': None,
+
+                'scoring_metric': None
+            }
+
+            # Collect test and train scores
+            test_scores = []
+            train_scores = []
+            for inner_fold_ind, inner_fold in self.inner_folds.iteritems():
+                test_scores.append(
+                    inner_fold.pipelines[pipeline_id]['test_score'])
+                train_scores.append(
+                    inner_fold.pipelines[pipeline_id]['train_score']
+                    )
+
+            # Calculate and save statistics on test and train scores
+            self.pipelines[pipeline_id]['mean_test_score'] = \
+                np.mean(test_scores)
+            self.pipelines[pipeline_id]['median_test_score'] = \
+                np.median(test_scores)
+            self.pipelines[pipeline_id]['test_score_std'] = np.std(test_scores,
+                                                                   ddof=1)
+
+            self.pipelines[pipeline_id]['mean_train_score'] = \
+                np.mean(train_scores)
+            self.pipelines[pipeline_id]['median_train_score'] = \
+                np.median(train_scores)
+            self.pipelines[pipeline_id]['train_score_std'] = \
+                np.std(train_scores,ddof=1)
+
+            # Find highest score and corresponding pipeline index
+            if max_score < self.pipelines[pipeline_id]['median_test_score']:
+                max_score = self.pipelines[pipeline_id]['median_test_score']
+                max_ind = pipeline_id
+
+        self.best_pipeline_ind = max_ind
+
+        best_pipeline = self.pipelines[self.best_pipeline_ind]
+
+        # Initialize pipeline that will be trained on all outer-fold training
+        # data
+        best_pipeline['all_trained_pipeline'] = clone(pipelines[max_ind],
+                                                       safe=True)
+
+        best_pipeline['scoring_metric'] = scoring_metric
+
+        # Train on all inner loop training data
+        best_pipeline['all_trained_pipeline'].fit(self.X_train, self.y_train)
+
+        # Form predictions for validation and training targets
+        best_pipeline['y_validation_pred'] = \
+            best_pipeline['all_trained_pipeline'].predict(self.X_test)
+        best_pipeline['outer_y_train_pred'] = \
+            best_pipeline['all_trained_pipeline'].predict(self.X_train)
+
+        # Calculate outer loop training score
+        best_pipeline['outer_train_score'] = \
+            PipelineEvaluator().get_score(self.y_train,
+                                          best_pipeline['outer_y_train_pred'],
+                                          scoring_metric)
+
+        # Calculate validation score
+        best_pipeline['validation_score'] = \
+            PipelineEvaluator().get_score(self.y_test,
+                                          best_pipeline['y_validation_pred'],
+                                          scoring_metric)
+
+class PipelineEvaluator(object):
+    """
+    Class used to evaluate pipelines
+    """
+    def get_score(self, y, y_pred, scoring_metric):
+        """
+        Returns the score given target values, predicted values, and a scoring
+        metric.
+        """
+        if scoring_metric == 'auc':
+            # Get ROC curve points
+            false_positive_rate, true_positive_rate, _ = sklearn_metrics.roc_curve(y,
+                                                                                   y_pred)
+
+            # Calculate the area under the curve
+            score =  sklearn_metrics.auc(false_positive_rate, true_positive_rate)
+
+        return score
 
 class PipelineBundle(object):
     """
