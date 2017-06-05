@@ -1,3 +1,7 @@
+# Author: Christopher M. Shymansky <CMShymansky@gmail.com>,
+# License: ALv2
+# Date created: 2016-11-25
+
 import sys
 
 sys.path.append("../code")
