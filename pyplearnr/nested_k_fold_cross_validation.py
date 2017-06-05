@@ -149,11 +149,6 @@ class NestedKFoldCrossValidation(object):
 
         self.pick_winning_pipeline()
 
-    def print_report(self):
-        """
-        """
-        print self.get_report()
-
     def train_winning_pipeline(self, winning_pipeline_ind):
         """
         Simply sets the index of the best pipeline and trains it on all of the
@@ -201,13 +196,10 @@ class NestedKFoldCrossValidation(object):
         self.best_pipeline['trained_all_pipeline'].fit(self.shuffled_X,
                                                        self.shuffled_y)
 
+        self.print_report()
 
-
-
+    def print_report(self):
         print self.get_report()
-
-        # self.print_report()
-
 
     def get_report(self):
         """
@@ -246,30 +238,28 @@ class NestedKFoldCrossValidation(object):
 
         pipeline_str = '\n'.join(pipeline_str)
 
-        if estimator_type == 'classifier':
-            report = (
-            "\nPipeline:\n\n%s\n"
-            "\nTraining set classification accuracy:\t%1.3f"
-            "\nTest set classification accuracy:\t%1.3f"
-            "\n\nConfusion matrix:"
-            "\n\n%s"
-            "\n\nNormalized confusion matrix:"
-            "\n\n%s"
-            "\n\nClassification report:\n\n%s"
-            "\n\nGrid search parameters:\n\n%s\n"
-
-            )%(pipeline_str,train_score,test_score,
-               np.array_str(confusion_matrix),np.array_str(normalized_confusion_matrix),
-               classification_report,grid_search_str)
-        elif estimator_type == 'regressor':
+        if self.scoring_metric == 'rmse':
             report = (
             "\nPipeline:\n\n%s\n"
             "\nTraining L2 norm score: %1.3f"
             "'\nTest L2 norm score: %1.3f"
             "\n\nGrid search parameters:\n\n%s\n"
-            )%(pipeline_str,train_score,test_score,grid_search_str)
+            )%(pipeline_str,train_score,test_score)
         else:
-            report = None
+            report = (
+            "\nPipeline:\n\n%s\n"
+            # "\nTraining set classification accuracy:\t%1.3f"
+            "\nTest set classification accuracy:\t%1.3f"
+            # "\n\nConfusion matrix:"
+            # "\n\n%s"
+            # "\n\nNormalized confusion matrix:"
+            # "\n\n%s"
+            # "\n\nClassification report:\n\n%s"
+            # "\n\nGrid search parameters:\n\n%s\n"
+
+            )%(pipeline_str,self.best_pipeline['median_validation_score'])#,
+            #    np.array_str(confusion_matrix),np.array_str(normalized_confusion_matrix),
+            #    classification_report)
 
         return report
 
