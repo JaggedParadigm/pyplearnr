@@ -23,24 +23,7 @@ class NestedKFoldCrossValidation(object):
     def __init__(self, outer_loop_fold_count=3, inner_loop_fold_count=3,
                  outer_loop_split_seed=None, inner_loop_split_seed=None,
                  shuffle_flag=True, shuffle_seed=None):
-        ############### Check input types ###############
-        outer_loop_fold_count_error = "The outer_loop_fold_count" \
-            " keyword argument, dictating the number of folds in the outer " \
-            "loop, must be a positive integer"
-
-        assert type(outer_loop_fold_count) is int, outer_loop_fold_count_error
-
-        assert outer_loop_fold_count > 0, outer_loop_fold_count_error
-
-        inner_loop_fold_count_error = "The inner_loop_fold_count" \
-            " keyword argument, dictating the number of folds in the inner" \
-            " loop, must be a positive integer"
-
-        assert type(inner_loop_fold_count) is int, inner_loop_fold_count_error
-
-        assert inner_loop_fold_count > 0, inner_loop_fold_count_error
-
-        ############### Initialize fields ###############
+        ############### Initialize data ###############
         # Flag determining if initial data should be shuffled_y
         self.shuffle_flag = shuffle_flag
 
@@ -76,13 +59,17 @@ class NestedKFoldCrossValidation(object):
         self.best_pipeline = {
             "best_pipeline_ind": None,
             "trained_all_pipeline": None,
+            "validation_scores": [],
             "mean_validation_score": None,
+            "validation_score_std": None,
             "median_validation_score": None,
-            "validation_score_std": None
+            "interquartile_range": None,
+            "confusion_matrix": None
         }
 
         self.scoring_metric = None
 
+        ############### Populate fields with defaults ###############
         # Generate seed for initial shuffling of data if not provided
         if not self.shuffle_seed:
             self.shuffle_seed = random.randint(1,5000)
@@ -99,7 +86,23 @@ class NestedKFoldCrossValidation(object):
                                             1,
                                             self.inner_loop_fold_count*20)
 
-        ############### Check fields ###############
+        ############### Check fields so far ###############
+        outer_loop_fold_count_error = "The outer_loop_fold_count" \
+            " keyword argument, dictating the number of folds in the outer " \
+            "loop, must be a positive integer"
+
+        assert type(self.outer_loop_fold_count) is int, outer_loop_fold_count_error
+
+        assert self.outer_loop_fold_count > 0, outer_loop_fold_count_error
+
+        inner_loop_fold_count_error = "The inner_loop_fold_count" \
+            " keyword argument, dictating the number of folds in the inner" \
+            " loop, must be a positive integer"
+
+        assert type(self.inner_loop_fold_count) is int, inner_loop_fold_count_error
+
+        assert self.inner_loop_fold_count > 0, inner_loop_fold_count_error
+
         assert type(self.outer_loop_split_seed) is int, "The " \
             "outer_loop_split_seed keyword argument, dictating how the data "\
             "is split into folds for the outer loop, must be an integer."
@@ -121,7 +124,8 @@ class NestedKFoldCrossValidation(object):
         self.X = X
         self.y = y
 
-        self.pipelines = {pipeline_ind: pipeline for pipeline_ind, pipeline in enumerate(pipelines)}
+        self.pipelines = {pipeline_ind: pipeline \
+            for pipeline_ind, pipeline in enumerate(pipelines)}
 
         self.scoring_metric = scoring_metric
 
@@ -165,9 +169,8 @@ class NestedKFoldCrossValidation(object):
                                               self.scoring_metric)
 
 
-        # Collects scores for best pipeline and evaluates expected out-of-test
-        # score metrics
-        validation_scores = []
+        # Collects scores for best pipeline
+        validation_scores = self.best_pipeline['validation_scores']
         classification_reports = []
         for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
             validation_scores.append(
@@ -179,15 +182,7 @@ class NestedKFoldCrossValidation(object):
                             self.best_pipeline_ind]['test_classification_report']
                             )
 
-        print classification_reports
-
-        self.best_pipeline['mean_validation_score'] = np.mean(validation_scores)
-        self.best_pipeline['median_validation_score'] = np.median(
-                                                        validation_scores
-                                                        )
-        self.best_pipeline['validation_score_std'] = np.std(validation_scores,
-                                                            ddof=1)
-
+        # Train best pipeline on all shuffled data for production
         self.best_pipeline['trained_all_pipeline'] = clone(
                                         self.pipelines[self.best_pipeline_ind],
                                         safe=True
@@ -196,6 +191,7 @@ class NestedKFoldCrossValidation(object):
         self.best_pipeline['trained_all_pipeline'].fit(self.shuffled_X,
                                                        self.shuffled_y)
 
+        # Output report detailing pipeline steps and statistics
         self.print_report()
 
     def print_report(self):
@@ -205,6 +201,17 @@ class NestedKFoldCrossValidation(object):
         """
         Generates report string
         """
+        # print classification_reports
+
+
+
+        self.best_pipeline['mean_validation_score'] = np.mean(validation_scores)
+        self.best_pipeline['median_validation_score'] = np.median(
+                                                        validation_scores
+                                                        )
+        self.best_pipeline['validation_score_std'] = np.std(validation_scores,
+                                                            ddof=1)
+
         format_str = '{0:20}{1:20}{2:1}{3:<10}'
 
         blank_line = ['','','','']
