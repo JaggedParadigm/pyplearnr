@@ -116,19 +116,18 @@ class NestedKFoldCrossValidation(object):
         Perform nested k-fold cross-validation on the data using the user-
         provided pipelines
         """
-        ############### Check inputs ###############
-        self.check_feature_target_data_consistent(X, y)
-
-        # TODO: add check for pipelines once this is working
-
+        ############### Save inputs ###############
         self.X = X
         self.y = y
 
-        self.pipelines = {pipeline_ind: pipeline \
-            for pipeline_ind, pipeline in enumerate(pipelines)}
-
         self.scoring_metric = scoring_metric
 
+        ############### Check inputs ###############
+        self.check_feature_target_data_consistent(self.X, self.y)
+
+        # TODO: add check for pipelines once this is working
+
+        ############### Shuffle data and save ###############
         point_count = X.shape[0]
 
         # Get shuffle indices
@@ -136,22 +135,63 @@ class NestedKFoldCrossValidation(object):
             self.shuffled_data_inds = self.get_shuffled_data_inds(point_count)
         else:
             # Make shuffle indices those which will result in same array if
-            # shuffling isnt desired
+            # shuffling isn't desired
             self.shuffled_data_inds = np.arange(point_count)
 
-        # Calculate outer and inner loop split indices
-        self.get_outer_split_indices(X, y=y, stratified=stratified)
-
-        # Shuffle data
+        # Shuffle data and save
         self.shuffled_X = X[self.shuffled_data_inds]
         self.shuffled_y = y[self.shuffled_data_inds]
+
+        ############### Save pipelines ###############
+        self.pipelines = {pipeline_ind: pipeline \
+            for pipeline_ind, pipeline in enumerate(pipelines)}
+
+        ############### Nested k-fold cross-validation ###############
+        # Derive outer and inner loop split indices
+        self.get_outer_split_indices(self.shuffled_X, y=self.shuffled_y,
+                                     stratified=stratified)
 
         # Perform nested k-fold cross-validation
         for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
             outer_fold.fit(self.shuffled_X, self.shuffled_y,
                            self.pipelines, scoring_metric=scoring_metric)
 
-        self.pick_winning_pipeline()
+       ############### Pick and train winning pipeline ###############
+        self.pick_train_winning_pipeline()
+
+    def pick_train_winning_pipeline(self, tie_breaker='choice'):
+        """
+        Chooses winner of nested k-fold cross-validation as the majority vote
+        of each outer fold winner and trains i
+        """
+        # Collect all winning pipelines from each inner loop contest of each
+        # outer fold
+        outer_fold_winners = [outer_fold.best_pipeline_ind \
+            for outer_fold_ind, outer_fold in self.outer_folds.iteritems()]
+
+        # Determine winner of all folds by majority vote
+        counts = {x: outer_fold_winners.count(x) for x in outer_fold_winners}
+
+        max_count = max([count for x, count in counts.iteritems()])
+
+        mode_inds = [x for x, count in counts.iteritems() if count==max_count]
+
+        if len(mode_inds) == 1:
+            # Save winner if only one
+            self.train_winning_pipeline(mode_inds[0])
+        else:
+            if tie_breaker=='choice':
+                # Encourage user to choose simplest model if there is no clear
+                # winner
+                for mode_ind in mode_inds:
+                    print mode_ind, self.pipelines[mode_ind]
+                print "\n\nNo model was chosen because there is no clear winner. " \
+                      "Please use the train_winning_pipeline method with one of the "\
+                      "indices above.\n\nExample:\tkfcv.fit(X.values, " \
+                      "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"
+            elif tie_breaker=='first':
+                # Just set index to first mode
+                self.train_winning_pipeline(mode_inds[0])
 
     def train_winning_pipeline(self, winning_pipeline_ind):
         """
@@ -203,7 +243,7 @@ class NestedKFoldCrossValidation(object):
         """
         # print classification_reports
 
-
+        print self.best_pipeline['validation_scores']
 
         self.best_pipeline['mean_validation_score'] = np.mean(validation_scores)
         self.best_pipeline['median_validation_score'] = np.median(
@@ -269,128 +309,6 @@ class NestedKFoldCrossValidation(object):
             #    classification_report)
 
         return report
-
-
-
-    def get_report_old(self,pipeline,grid_search,feature_selection_type,
-                   estimator,
-                   estimator_type,
-                   train_score,
-                   test_score,
-                   confusion_matrix,
-                   normalized_confusion_matrix,
-                   classification_report):
-
-        # Collect pipeline steps and key,value pairs for all parameters
-        format_str = '{0:20}{1:20}{2:1}{3:<10}'
-
-        blank_line = ['','','','']
-
-        pipeline_str = []
-        for step_ind,step in enumerate(pipeline.steps):
-            step_name = step[0]
-
-            step_obj = step[1]
-
-            step_class = step_obj.__class__.__name__
-
-            numbered_step = '%d: %s'%(step_ind+1,step_name)
-
-            pipeline_str.append(format_str.format(*[numbered_step,step_class,'','']))
-
-            pipeline_str.append(format_str.format(*blank_line)) # Blank line
-
-            step_fields = step_obj.get_params(deep=False)
-
-            # Add fields to list of formatted strings
-            step_fields = [format_str.format(*['',field,' = ',field_value]) \
-                                 for field,field_value in step_fields.iteritems()]
-
-            pipeline_str.append('\n'.join(step_fields))
-
-            pipeline_str.append(format_str.format(*blank_line))
-
-        pipeline_str = '\n'.join(pipeline_str)
-
-        # Collect grid search key,value pairs for all parameters
-        grid_search_fields = grid_search.get_params(deep=False)
-
-        grid_search_str = [format_str.format(*['',field,' = ',field_value]) \
-                           for field,field_value in grid_search_fields.iteritems()\
-                            if field != 'estimator']
-
-        grid_search_str.append(format_str.format(*blank_line))
-
-        grid_search_str.append(format_str.format(*['Best parameters:','','','']))
-
-        grid_search_str.append(format_str.format(*blank_line))
-
-        grid_search_str.extend([format_str.format(*['',param_name,' = ',param_value]) \
-                                for param_name,param_value in grid_search.best_params_.iteritems()])
-
-        grid_search_str = '\n'.join(grid_search_str)
-
-
-        if estimator_type == 'classifier':
-            report = (
-            "\nPipeline:\n\n%s\n"
-            "\nTraining set classification accuracy:\t%1.3f"
-            "\nTest set classification accuracy:\t%1.3f"
-            "\n\nConfusion matrix:"
-            "\n\n%s"
-            "\n\nNormalized confusion matrix:"
-            "\n\n%s"
-            "\n\nClassification report:\n\n%s"
-            "\n\nGrid search parameters:\n\n%s\n"
-
-            )%(pipeline_str,train_score,test_score,
-               np.array_str(confusion_matrix),np.array_str(normalized_confusion_matrix),
-               classification_report,grid_search_str)
-        elif estimator_type == 'regressor':
-            report = (
-            "\nPipeline:\n\n%s\n"
-            "\nTraining L2 norm score: %1.3f"
-            "'\nTest L2 norm score: %1.3f"
-            "\n\nGrid search parameters:\n\n%s\n"
-            )%(pipeline_str,train_score,test_score,grid_search_str)
-        else:
-            report = None
-
-        return report
-
-
-    def pick_winning_pipeline(self, tie_breaker='choice'):
-        """
-        Chooses winner of nested k-fold cross-validation as the majority vote of
-        each outer fold winner
-        """
-        # Collect all winning pipelines in for inner loop contest of each outer
-        # fold
-        outer_fold_winners = [outer_fold.best_pipeline_ind \
-                              for outer_fold_ind, outer_fold in self.outer_folds.iteritems()]
-
-        # Determine winner of all folds by majority vote
-        counts = {x: outer_fold_winners.count(x) for x in outer_fold_winners}
-
-        max_count = max([count for x, count in counts.iteritems()])
-
-        mode_inds = [x for x, count in counts.iteritems() if count==max_count]
-
-        if len(mode_inds) == 1:
-            self.train_winning_pipeline(mode_inds[0])
-        else:
-            if tie_breaker=='choice':
-                # Encourage user to choose simplest model if there is no clear
-                # winner
-                for mode_ind in mode_inds:
-                    print mode_ind, self.pipelines[mode_ind]
-                print "\n\nNo model was chosen because there is no clear winner. " \
-                      "Please use the train_winning_pipeline method with one of the "\
-                      "indices above.\n\nExample:\tkfcv.fit(X.values, " \
-                      "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"
-            elif tie_breaker=='first':
-                # Just set index to first mode
-                self.train_winning_pipeline(mode_inds[0])
 
     def get_shuffled_data_inds(self, point_count):
         """

@@ -8,6 +8,84 @@ from sklearn.base import clone
 
 from .pipeline_evaluator import PipelineEvaluator
 
+class Fold(object):
+    """
+    Class containing test/train split indices for inner folds of nest k-fold
+    cross-validation run
+    """
+    def __init__(self, fold_id=None, test_fold_inds=None,
+                 train_fold_inds=None):
+        ############### Initialize fields ###############
+        self.fold_id = fold_id
+
+        self.test_fold_inds = test_fold_inds
+
+        self.train_fold_inds = train_fold_inds
+
+        self.X_test = None
+        self.y_test = None
+
+        self.X_train = None
+        self.y_train = None
+
+        self.pipelines = {}
+
+    def fit(self, outer_loop_X_train, outer_loop_y_train, pipelines,
+            scoring_metric='auc'):
+        """
+        Fits the pipeslines to the current inner fold training data
+        """
+        self.X_test = outer_loop_X_train[self.test_fold_inds]
+        self.y_test = outer_loop_y_train[self.test_fold_inds]
+
+        self.X_train = outer_loop_X_train[self.train_fold_inds]
+        self.y_train = outer_loop_y_train[self.train_fold_inds]
+
+        for pipeline_id, pipeline in pipelines.iteritems():
+            # Initialize this combination
+            self.pipelines[pipeline_id] = {
+                'id': pipeline_id,
+
+                'pipeline': clone(pipeline, safe=True),
+
+                'y_test_pred': None,
+                'y_train_pred': None,
+
+                'test_score': None,
+                'train_score': None,
+
+                'classification_report': None
+            }
+
+            # Fit pipeline to training set of fold
+            self.pipelines[pipeline_id]['pipeline'].fit(self.X_train,
+                                                        self.y_train
+                                                        )
+
+            # Calculate predicted targets from input test data
+            self.pipelines[pipeline_id]['y_test_pred'] = \
+                self.pipelines[pipeline_id]['pipeline'].predict(self.X_test)
+
+            # Calculate the training prediction for this model
+            self.pipelines[pipeline_id]['y_train_pred'] = \
+                self.pipelines[pipeline_id]['pipeline'].predict(self.X_train)
+
+            # Calculate train score
+            self.pipelines[pipeline_id]['train_score'] = \
+                PipelineEvaluator().get_score(
+                    self.y_train,
+                    self.pipelines[pipeline_id]['y_train_pred'],
+                    scoring_metric
+                    )
+
+            # Calculate test score
+            self.pipelines[pipeline_id]['test_score'] = \
+                PipelineEvaluator().get_score(
+                    self.y_test,
+                    self.pipelines[pipeline_id]['y_test_pred'],
+                    scoring_metric
+                    )
+                    
 class OuterFold(Fold):
     """
     Class containing test/train split indices for data
