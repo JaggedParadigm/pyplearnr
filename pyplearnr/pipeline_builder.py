@@ -34,8 +34,6 @@ from sklearn.linear_model import LinearRegression
 
 from sklearn.pipeline import Pipeline
 
-
-
 class PipelineBuilder(object):
     """
     Builds a collection of scikit-learn pipelines based on a combinatorial

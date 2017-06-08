@@ -20,8 +20,17 @@ class NestedKFoldCrossValidation(object):
     handles the model selection and the outer loop is used to provide an
     estimate of the chosen model's out of sample score.
     """
+    def train_best_inner_fold_pipeline(self, best_pipeline_ind,
+                                       outer_fold_ind=None):
+        """
+        """
+        self.outer_folds[outer_fold_ind].train_best_inner_fold_pipeline(
+                                                            best_pipeline_ind)
+
+
+
     def __init__(self, outer_loop_fold_count=3, inner_loop_fold_count=3,
-                 outer_loop_split_seed=None, inner_loop_split_seed=None,
+                 outer_loop_split_seed=None, inner_loop_split_seeds=None,
                  shuffle_flag=True, shuffle_seed=None):
         ############### Initialize data ###############
         # Flag determining if initial data should be shuffled_y
@@ -34,9 +43,12 @@ class NestedKFoldCrossValidation(object):
         self.outer_loop_fold_count = outer_loop_fold_count
         self.inner_loop_fold_count = inner_loop_fold_count
 
-        # Seeds determining splits
+        # Seeds determining initial split of data into outer-folds
         self.outer_loop_split_seed = outer_loop_split_seed
-        self.inner_loop_split_seed = inner_loop_split_seed
+
+        # List of seeds that will be used to split the training sets of the
+        # the outer-folds into inner folds
+        self.inner_loop_split_seeds = inner_loop_split_seeds
 
         # Shuffled data indices
         self.shuffled_data_inds = None
@@ -81,10 +93,11 @@ class NestedKFoldCrossValidation(object):
                                             1,
                                             self.outer_loop_fold_count*20)
 
-        if not self.inner_loop_split_seed:
-            self.inner_loop_split_seed = random.randint(
+        if not self.inner_loop_split_seeds:
+            self.inner_loop_split_seeds = np.random.randint(
                                             1,
-                                            self.inner_loop_fold_count*20)
+                                            high=self.inner_loop_fold_count*20,
+                                            size=self.outer_loop_fold_count)
 
         ############### Check fields so far ###############
         outer_loop_fold_count_error = "The outer_loop_fold_count" \
@@ -107,9 +120,10 @@ class NestedKFoldCrossValidation(object):
             "outer_loop_split_seed keyword argument, dictating how the data "\
             "is split into folds for the outer loop, must be an integer."
 
-        assert type(self.inner_loop_split_seed) is int, "The " \
+        assert type(self.inner_loop_split_seeds) is np.ndarray, "The " \
             "inner_loop_split_seed keyword argument, dictating how the data "\
-            "is split into folds for the inner loop, must be an integer."
+            "is split into folds for the inner loop, must be of type " \
+            "np.ndarray."
 
     def fit(self, X, y, pipelines, stratified=False, scoring_metric='auc'):
         """
@@ -156,8 +170,8 @@ class NestedKFoldCrossValidation(object):
             outer_fold.fit(self.shuffled_X, self.shuffled_y,
                            self.pipelines, scoring_metric=scoring_metric)
 
-       ############### Pick and train winning pipeline ###############
-        self.pick_train_winning_pipeline()
+    #    ############### Pick and train winning pipeline ###############
+    #     self.pick_train_winning_pipeline()
 
     def pick_train_winning_pipeline(self, tie_breaker='choice'):
         """
@@ -343,10 +357,9 @@ class NestedKFoldCrossValidation(object):
                                     random_state=self.outer_loop_split_seed)
             outer_split_kwargs = {}
 
-            inner_k_fold_splitter = KFold(
-                                        n_splits=self.inner_loop_fold_count,
-                                        random_state=self.inner_loop_split_seed)
-
+            inner_k_fold_splitters = \
+                [KFold(n_splits=self.inner_loop_fold_count, random_state=seed) \
+                for seed in self.inner_loop_split_seeds]
         else:
             outer_k_fold_splitter = StratifiedKFold(
                                 n_splits=self.outer_loop_fold_count,
@@ -354,9 +367,10 @@ class NestedKFoldCrossValidation(object):
 
             outer_split_kwargs = {'y': y}
 
-            inner_k_fold_splitter = StratifiedKFold(
-                                        n_splits=self.inner_loop_fold_count,
-                                        random_state=self.inner_loop_split_seed)
+            inner_k_fold_splitters = \
+                [StratifiedKFold(n_splits=self.inner_loop_fold_count,
+                                 random_state=seed) \
+                for seed in self.inner_loop_split_seeds]
 
         ################ Calculate and save outer and inner fold split indices ################
         for fold_id, (outer_train_inds, outer_test_inds) in enumerate(outer_k_fold_splitter.split(X,**outer_split_kwargs)):
@@ -370,6 +384,9 @@ class NestedKFoldCrossValidation(object):
                 inner_split_kwargs = {}
             else:
                 inner_split_kwargs = {'y': y[outer_train_inds]}
+
+            # Get inner fold splitter for current outer fold
+            inner_k_fold_splitter = inner_k_fold_splitters[fold_id]
 
             # Save inner fold test/train split indices
             for inner_fold_id, (inner_train_inds, inner_test_inds) in enumerate(inner_k_fold_splitter.split(X[outer_train_inds],**inner_split_kwargs)):
