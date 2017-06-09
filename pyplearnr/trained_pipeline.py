@@ -6,10 +6,10 @@ class TrainedPipeline(object):
     """
     Class mostly for storing metadata on pipelines (at least for the moment)
     """
-    def __init__(self, id=None, pipeline=None, scoring_metric=None,
+    def __init__(self, pipeline_id=None, pipeline=None, scoring_metric=None,
                  score_type='median'):
         ############### Initialize fields ###############
-        self.id = id
+        self.id = pipeline_id
 
         self.pipeline = pipeline
 
@@ -38,7 +38,7 @@ class TrainedPipeline(object):
         if self.scoring_metric == 'rmse':
             self.estimator_type = 'regressor'
         else:
-            self.estimatory_type = 'classification'
+            self.estimator_type = 'classification'
 
     def fit(self, X_train, y_train, X_test, y_test):
         """
@@ -82,15 +82,15 @@ class OuterFoldTrainedPipeline(TrainedPipeline):
     """
     Class for pipelines contained in outer loops
     """
-    def __init__(self, id=None, pipeline=None, scoring_metric=None,
+    def __init__(self, pipeline_id=None, pipeline=None, scoring_metric=None,
                  score_type='median'):
         # Tell class it is itself for weird Jupyter notebook %autoload
         # incompatibility
         self.__class__ = OuterFoldTrainedPipeline
 
-        super(OuterFoldTrainedPipeline, self).__init__(id=id, pipeline=pipeline,
-                                                       scoring_metric=None,
-                                                       score_type='median')
+        super(OuterFoldTrainedPipeline, self).__init__(pipeline_id=pipeline_id, pipeline=pipeline,
+                                                       scoring_metric=scoring_metric,
+                                                       score_type=score_type)
 
         ############### Initialize addtional fields ###############
         self.inner_loop_test_scores = None

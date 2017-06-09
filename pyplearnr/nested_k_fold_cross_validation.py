@@ -20,14 +20,314 @@ class NestedKFoldCrossValidation(object):
     handles the model selection and the outer loop is used to provide an
     estimate of the chosen model's out of sample score.
     """
-    def train_best_inner_fold_pipeline(self, best_pipeline_ind,
-                                       outer_fold_ind=None):
+    def fit(self, X, y, pipelines, stratified=False, scoring_metric='auc',
+            tie_breaker='choice', best_inner_fold_pipeline_inds=None,
+            best_outer_fold_pipeline=None):
         """
+        Perform nested k-fold cross-validation on the data using the user-
+        provided pipelines
         """
-        self.outer_folds[outer_fold_ind].train_best_inner_fold_pipeline(
-                                                            best_pipeline_ind)
+        if not best_outer_fold_pipeline:
+            ######## Choose best inner fold pipelines for outer folds ########
+            if not best_inner_fold_pipeline_inds:
+                ############### Save inputs ###############
+                self.X = X
+                self.y = y
+
+                self.scoring_metric = scoring_metric
+
+                ############### Check inputs ###############
+                self.check_feature_target_data_consistent(self.X, self.y)
+
+                # TODO: add check for pipelines once this is working
+
+                ############### Shuffle data and save ###############
+                point_count = X.shape[0]
+
+                # Get shuffle indices
+                if self.shuffle_flag:
+                    self.shuffled_data_inds = self.get_shuffled_data_inds(
+                                                                        point_count)
+                else:
+                    # Make shuffle indices those which will result in same array if
+                    # shuffling isn't desired
+                    self.shuffled_data_inds = np.arange(point_count)
+
+                # Shuffle data and save
+                self.shuffled_X = X[self.shuffled_data_inds]
+                self.shuffled_y = y[self.shuffled_data_inds]
+
+                ############### Save pipelines ###############
+                self.pipelines = {pipeline_ind: pipeline \
+                    for pipeline_ind, pipeline in enumerate(pipelines)}
+
+                ########## Derive outer and inner loop split indices ##########
+                self.get_outer_split_indices(self.shuffled_X, y=self.shuffled_y,
+                                             stratified=stratified)
+
+                ########### Perform nested k-fold cross-validation ###########
+                for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+                    outer_fold.fit(self.shuffled_X, self.shuffled_y,
+                                   self.pipelines,
+                                   scoring_metric=self.scoring_metric)
+            else:
+                for outer_fold_ind, best_pipeline_ind in \
+                    best_inner_fold_pipeline_inds.iteritems():
+
+                    self.outer_folds[outer_fold_ind].fit(
+                        self.shuffled_X, self.shuffled_y, self.pipelines,
+                        scoring_metric=self.scoring_metric,
+                        best_inner_fold_pipeline_ind=best_pipeline_ind)
+
+        ############### Choose best outer fold pipeline ###############
+        self.choose_best_outer_fold_pipeline(
+            tie_breaker=tie_breaker,
+            best_outer_fold_pipeline=best_outer_fold_pipeline)
 
 
+
+
+
+
+        # best_outer_fold_pipelines = self.get_best_outer_fold_pipelines()
+        #
+        # # ############### Pick and train winning pipeline ###############
+        # self.pick_winning_pipeline(tie_breaker=tie_breaker)
+
+    def choose_best_outer_fold_pipeline(self, tie_breaker='choice',
+                                        best_outer_fold_pipeline=None):
+        """
+        Pools winners of outer fold contests and selects ultimate winner by
+        majority vote or by user choice (preferably simplest model for better
+        out-of-sample performance) or some other decision rule,
+
+        Parameters
+        ----------
+        tie_breaker :   str, {'choice', 'first'}
+            Decision rule to use to decide the winner in the event of a tie
+            choice :    Inform the user that they need to use the
+                        choose_best_pipelines method to pick the winner of the
+                        inner loop contest
+            first :     Simply use the first model with the same score
+
+        """
+        # Collect all winning pipelines from each inner loop contest of each
+        # outer fold
+        outer_fold_winners = [outer_fold.best_pipeline_ind \
+            for outer_fold_ind, outer_fold in self.outer_folds.iteritems()]
+
+        # Determine winner of all folds by majority vote
+        counts = {x: outer_fold_winners.count(x) for x in outer_fold_winners}
+
+        max_count = max([count for x, count in counts.iteritems()])
+
+        mode_inds = [x for x, count in counts.iteritems() if count==max_count]
+
+        best_pipeline_ind = None
+
+        if not best_outer_fold_pipeline:
+            if len(mode_inds) == 1:
+                # Save winner if only one
+                best_pipeline_ind = mode_inds[0]
+            else:
+                if tie_breaker=='choice':
+                    # Encourage user to choose simplest model if there is no clear
+                    # winner
+                    for mode_ind in mode_inds:
+                        print mode_ind, self.pipelines[mode_ind]
+                    print "\n\nNo model was chosen because there is no clear winner. " \
+                          "Please use the same fit method with one of the "\
+                          "indices above.\n\nExample:\tkfcv.fit(X.values, " \
+                          "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"\
+                          "kfcv.fit(X.values, y.values, pipelines, " \
+                          "best_outer_fold_pipeline=9)"
+                elif tie_breaker=='first':
+                    best_pipeline_ind = mode_inds[0]
+        else:
+            best_pipeline_ind = best_outer_fold_pipeline
+
+        if best_pipeline_ind:
+            self.best_pipeline_ind = best_pipeline_ind
+
+
+
+
+
+
+
+
+
+    def pick_winning_pipeline(self, tie_breaker='choice'):
+        """
+        Pools winners of outer fold contests and selects ultimate winner by
+        majority vote or by user choice (preferably simplest model for better
+        out-of-sample performance) or some other decision rule,
+
+        Parameters
+        ----------
+        tie_breaker :   str, {'choice', 'first'}
+            Decision rule to use to decide the winner in the event of a tie
+            choice :    Inform the user that they need to use the
+                        choose_best_pipelines method to pick the winner of the
+                        inner loop contest
+            first :     Simply use the first model with the same score
+
+        """
+        # Collect all winning pipelines from each inner loop contest of each
+        # outer fold
+        outer_fold_winners = [outer_fold.best_pipeline_ind \
+            for outer_fold_ind, outer_fold in self.outer_folds.iteritems()]
+
+        # Determine winner of all folds by majority vote
+        counts = {x: outer_fold_winners.count(x) for x in outer_fold_winners}
+
+        max_count = max([count for x, count in counts.iteritems()])
+
+        mode_inds = [x for x, count in counts.iteritems() if count==max_count]
+
+        best_pipeline_ind = None
+
+        if len(mode_inds) == 1:
+            # Save winner if only one
+            best_pipeline_ind = mode_inds[0]
+        else:
+            if tie_breaker=='choice':
+                # Encourage user to choose simplest model if there is no clear
+                # winner
+                for mode_ind in mode_inds:
+                    print mode_ind, self.pipelines[mode_ind]
+                print "\n\nNo model was chosen because there is no clear winner. " \
+                      "Please use the same fit method with one of the "\
+                      "indices above.\n\nExample:\tkfcv.fit(X.values, " \
+                      "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"\
+                      "kfcv.fit(X.values, y.values, pipelines, " \
+                      "best_outer_fold_pipeline=9)"
+            elif tie_breaker=='first':
+                best_pipeline_ind = mode_inds[0]
+
+        if best_pipeline_ind:
+            self.best_pipeline_ind = best_pipeline_ind
+
+
+        # if len(mode_inds) == 1:
+        #     # Save winner if only one
+        #     self.train_winning_pipeline(mode_inds[0])
+        # else:
+        #     if tie_breaker=='choice':
+        #         # Encourage user to choose simplest model if there is no clear
+        #         # winner
+        #         for mode_ind in mode_inds:
+        #             print mode_ind, self.pipelines[mode_ind]
+        #         print "\n\nNo model was chosen because there is no clear winner. " \
+        #               "Please use the train_winning_pipeline method with one of the "\
+        #               "indices above.\n\nExample:\tkfcv.fit(X.values, " \
+        #               "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"
+        #     elif tie_breaker=='first':
+        #         # Just set index to first mode
+        #         self.train_winning_pipeline(mode_inds[0])
+
+    # def train_best_inner_fold_pipelines(self, best_outer_fold_pipelines,
+    #                                     tie_breaker='choice'):
+    #     """
+    #     Trains and obtains validation scores for the best inner fold pipeline
+    #     for each given fold, pools winners of outer fold contests and selects
+    #     ultimate winner by majority vote or by user choice (preferably simplest
+    #     model for better out-of-sample performance) or some other decision rule,
+    #     and trains and saves the winner on all of the data for production if
+    #     desired.
+    #
+    #     Parameters
+    #     ----------
+    #     best_outer_fold_pipelines : dict with fold_id and best pipeline
+    #                                 index as the key-value pairs
+    #         Designates pipelines that won the inner-fold contest
+    #
+    #     """
+    #     ############### Train all user designated pipelines ###############
+    #     for fold_ind, pipeline_ind in best_outer_fold_pipelines.iteritems():
+    #         self.outer_folds[fold_ind].train_best_inner_fold_pipeline(
+    #                                                         pipeline_ind)
+    #
+    #     self.pick_winning_pipeline(tie_breaker=tie_breaker)
+
+
+
+    # def pick_train_winning_pipeline(self, tie_breaker='choice'):
+    #     """
+    #     Chooses winner of nested k-fold cross-validation as the majority vote
+    #     of each outer fold winner and trains i
+    #     """
+    #     # Collect all winning pipelines from each inner loop contest of each
+    #     # outer fold
+    #     outer_fold_winners = [outer_fold.best_pipeline_ind \
+    #         for outer_fold_ind, outer_fold in self.outer_folds.iteritems()]
+    #
+    #     print outer_fold_winners
+    #
+    #     # Determine winner of all folds by majority vote
+    #     counts = {x: outer_fold_winners.count(x) for x in outer_fold_winners}
+    #
+    #     max_count = max([count for x, count in counts.iteritems()])
+    #
+    #     mode_inds = [x for x, count in counts.iteritems() if count==max_count]
+    #
+    #     if len(mode_inds) == 1:
+    #         # Save winner if only one
+    #         self.train_winning_pipeline(mode_inds[0])
+    #     else:
+    #         if tie_breaker=='choice':
+    #             # Encourage user to choose simplest model if there is no clear
+    #             # winner
+    #             for mode_ind in mode_inds:
+    #                 print mode_ind, self.pipelines[mode_ind]
+    #             print "\n\nNo model was chosen because there is no clear winner. " \
+    #                   "Please use the train_winning_pipeline method with one of the "\
+    #                   "indices above.\n\nExample:\tkfcv.fit(X.values, " \
+    #                   "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"
+    #         elif tie_breaker=='first':
+    #             # Just set index to first mode
+    #             self.train_winning_pipeline(mode_inds[0])
+    #
+    def train_winning_pipeline(self, winning_pipeline_ind):
+        """
+        Simply sets the index of the best pipeline and trains it on all of the
+        training data.
+        """
+        self.best_pipeline_ind = winning_pipeline_ind
+
+        self.best_pipeline['best_pipeline_ind'] = self.best_pipeline_ind
+
+        # Make sure the pipeline that won has its validation score set in each
+        # outer fold
+        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+            outer_fold.train_winning_pipeline(self.best_pipeline_ind,
+                                              self.scoring_metric)
+
+
+        # Collects scores for best pipeline
+        validation_scores = self.best_pipeline['validation_scores']
+        classification_reports = []
+        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+            validation_scores.append(
+                outer_fold.pipelines[
+                    self.best_pipeline_ind]['validation_score']
+                    )
+
+            classification_reports.append(outer_fold.pipelines[
+                            self.best_pipeline_ind]['test_classification_report']
+                            )
+
+        # Train best pipeline on all shuffled data for production
+        self.best_pipeline['trained_all_pipeline'] = clone(
+                                        self.pipelines[self.best_pipeline_ind],
+                                        safe=True
+                                        )
+
+        self.best_pipeline['trained_all_pipeline'].fit(self.shuffled_X,
+                                                       self.shuffled_y)
+
+        # Output report detailing pipeline steps and statistics
+        self.print_report()
 
     def __init__(self, outer_loop_fold_count=3, inner_loop_fold_count=3,
                  outer_loop_split_seed=None, inner_loop_split_seeds=None,
@@ -124,129 +424,6 @@ class NestedKFoldCrossValidation(object):
             "inner_loop_split_seed keyword argument, dictating how the data "\
             "is split into folds for the inner loop, must be of type " \
             "np.ndarray."
-
-    def fit(self, X, y, pipelines, stratified=False, scoring_metric='auc'):
-        """
-        Perform nested k-fold cross-validation on the data using the user-
-        provided pipelines
-        """
-        ############### Save inputs ###############
-        self.X = X
-        self.y = y
-
-        self.scoring_metric = scoring_metric
-
-        ############### Check inputs ###############
-        self.check_feature_target_data_consistent(self.X, self.y)
-
-        # TODO: add check for pipelines once this is working
-
-        ############### Shuffle data and save ###############
-        point_count = X.shape[0]
-
-        # Get shuffle indices
-        if self.shuffle_flag:
-            self.shuffled_data_inds = self.get_shuffled_data_inds(point_count)
-        else:
-            # Make shuffle indices those which will result in same array if
-            # shuffling isn't desired
-            self.shuffled_data_inds = np.arange(point_count)
-
-        # Shuffle data and save
-        self.shuffled_X = X[self.shuffled_data_inds]
-        self.shuffled_y = y[self.shuffled_data_inds]
-
-        ############### Save pipelines ###############
-        self.pipelines = {pipeline_ind: pipeline \
-            for pipeline_ind, pipeline in enumerate(pipelines)}
-
-        ############### Nested k-fold cross-validation ###############
-        # Derive outer and inner loop split indices
-        self.get_outer_split_indices(self.shuffled_X, y=self.shuffled_y,
-                                     stratified=stratified)
-
-        # Perform nested k-fold cross-validation
-        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
-            outer_fold.fit(self.shuffled_X, self.shuffled_y,
-                           self.pipelines, scoring_metric=scoring_metric)
-
-    #    ############### Pick and train winning pipeline ###############
-    #     self.pick_train_winning_pipeline()
-
-    def pick_train_winning_pipeline(self, tie_breaker='choice'):
-        """
-        Chooses winner of nested k-fold cross-validation as the majority vote
-        of each outer fold winner and trains i
-        """
-        # Collect all winning pipelines from each inner loop contest of each
-        # outer fold
-        outer_fold_winners = [outer_fold.best_pipeline_ind \
-            for outer_fold_ind, outer_fold in self.outer_folds.iteritems()]
-
-        # Determine winner of all folds by majority vote
-        counts = {x: outer_fold_winners.count(x) for x in outer_fold_winners}
-
-        max_count = max([count for x, count in counts.iteritems()])
-
-        mode_inds = [x for x, count in counts.iteritems() if count==max_count]
-
-        if len(mode_inds) == 1:
-            # Save winner if only one
-            self.train_winning_pipeline(mode_inds[0])
-        else:
-            if tie_breaker=='choice':
-                # Encourage user to choose simplest model if there is no clear
-                # winner
-                for mode_ind in mode_inds:
-                    print mode_ind, self.pipelines[mode_ind]
-                print "\n\nNo model was chosen because there is no clear winner. " \
-                      "Please use the train_winning_pipeline method with one of the "\
-                      "indices above.\n\nExample:\tkfcv.fit(X.values, " \
-                      "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"
-            elif tie_breaker=='first':
-                # Just set index to first mode
-                self.train_winning_pipeline(mode_inds[0])
-
-    def train_winning_pipeline(self, winning_pipeline_ind):
-        """
-        Simply sets the index of the best pipeline and trains it on all of the
-        training data.
-        """
-        self.best_pipeline_ind = winning_pipeline_ind
-
-        self.best_pipeline['best_pipeline_ind'] = self.best_pipeline_ind
-
-        # Make sure the pipeline that won has its validation score set in each
-        # outer fold
-        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
-            outer_fold.train_winning_pipeline(self.best_pipeline_ind,
-                                              self.scoring_metric)
-
-
-        # Collects scores for best pipeline
-        validation_scores = self.best_pipeline['validation_scores']
-        classification_reports = []
-        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
-            validation_scores.append(
-                outer_fold.pipelines[
-                    self.best_pipeline_ind]['validation_score']
-                    )
-
-            classification_reports.append(outer_fold.pipelines[
-                            self.best_pipeline_ind]['test_classification_report']
-                            )
-
-        # Train best pipeline on all shuffled data for production
-        self.best_pipeline['trained_all_pipeline'] = clone(
-                                        self.pipelines[self.best_pipeline_ind],
-                                        safe=True
-                                        )
-
-        self.best_pipeline['trained_all_pipeline'].fit(self.shuffled_X,
-                                                       self.shuffled_y)
-
-        # Output report detailing pipeline steps and statistics
-        self.print_report()
 
     def print_report(self):
         print self.get_report()
