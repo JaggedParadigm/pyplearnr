@@ -115,6 +115,15 @@ class OuterFold(Fold):
 
         self.best_pipeline_ind = None
 
+    def train_winning_pipeline(self, best_pipeline_ind):
+        """
+        Trains ultimate winner of the inner-loop of the nested k-fold cross-
+        validation contest on the training set of this outer loop and scores it
+        based on the previously saved scoring metric.
+        """
+        self.pipelines[best_pipeline_ind].fit(self.X_train, self.y_train,
+                                              self.X_test, self.y_test)
+
     def fit(self, shuffled_X, shuffled_y, pipelines, scoring_metric='auc',
             score_type='median', tie_breaker='choice',
             best_inner_fold_pipeline_ind=None):
@@ -170,67 +179,11 @@ class OuterFold(Fold):
                                            scoring_metric=scoring_metric,
                                            score_type=score_type)
 
+        ############### Choose best inner fold pipeline ###############
         self.choose_best_inner_fold_pipeline(
             score_type=score_type,
             tie_breaker=tie_breaker,
             best_inner_fold_pipeline_ind=best_inner_fold_pipeline_ind)
-
-        ############### Choose best inner fold pipeline ###############
-
-
-        # self.choose_train_best_pipeline(**choose_train_best_pipeline_kwargs)
-
-        # raise Exception()
-        #
-        # ############### Train best pipeline ###############
-        # self.train_best_pipeline(best_pipeline_ind)
-        #
-        #
-        #
-        #
-        #
-        #
-        # print self.pipelines
-        # print self.best_pipeline_ind
-        #
-        # best_pipeline = self.pipelines[self.best_pipeline_ind]
-        #
-        # # Initialize pipeline that will be trained on all outer-fold training
-        # # data
-        # best_pipeline['all_trained_pipeline'] = clone(pipelines[max_ind],
-        #                                                safe=True)
-        #
-        # best_pipeline['scoring_metric'] = scoring_metric
-        #
-        # # Train on all inner loop training data
-        # best_pipeline['all_trained_pipeline'].fit(self.X_train, self.y_train)
-        #
-        # # Form predictions for validation and training targets
-        # best_pipeline['y_validation_pred'] = \
-        #     best_pipeline['all_trained_pipeline'].predict(self.X_test)
-        # best_pipeline['outer_y_train_pred'] = \
-        #     best_pipeline['all_trained_pipeline'].predict(self.X_train)
-        #
-        # # Form actually and predicted target comparison pairs
-        # train_comparison_pair = [self.y_train,
-        #                          best_pipeline['outer_y_train_pred']]
-        # test_comparison_pair = [self.y_test,
-        #                         best_pipeline['y_validation_pred']]
-        #
-        # # Calculate outer loop training score
-        # best_pipeline['outer_train_score'] = \
-        #     PipelineEvaluator().get_score(*train_comparison_pair + [scoring_metric])
-        #
-        # # Calculate validation score
-        #
-        # best_pipeline['validation_score'] = \
-        #     PipelineEvaluator().get_score(*test_comparison_pair + [scoring_metric])
-        #
-        # # Calculate classification report
-        # best_pipeline['test_classification_report'] = \
-        #     PipelineEvaluator().get_classification_report(
-        #         *test_comparison_pair
-        #         )
 
     def choose_best_inner_fold_pipeline(self, score_type='median',
                                         tie_breaker='choice',
@@ -308,76 +261,6 @@ class OuterFold(Fold):
         if best_pipeline_ind:
             self.best_pipeline_ind = best_pipeline_ind
 
-        #     if len(best_pipeline_inds) == 1:
-        #         # Save winner if only one best_pipeline_ind, outer_fold_ind
-        #         self.train_best_inner_fold_pipeline(best_pipeline_inds[0])
-        #     else:
-        #         if tie_breaker=='choice':
-        #             # Encourage user to choose simplest model if there is no clear
-        #             # winner
-        #             print "Outer Fold: %d"%(self.fold_id), '\n'
-        #             for pipeline_ind in best_pipeline_inds:
-        #                 print pipeline_ind, self.pipelines[pipeline_ind].pipeline
-        #             print "\n\nNo model was chosen because there is no clear " \
-        #                   "winner. Please use the choose_best_pipelines method " \
-        #                   "with one of the indices above." \
-        #                   "\n\nExample:\tkfcv.fit(X.values, y.values, " \
-        #                   "pipelines)\n\t\tkfcv.train_best_inner_fold_pipeline" \
-        #                   "(3, outer_fold_ind=1)"
-        #         elif tie_breaker == 'first':
-        #             self.train_best_inner_fold_pipeline(best_pipeline_inds[0])
-        # else:
-        #     self.train_best_inner_fold_pipeline(best_inner_fold_pipeline_ind)
-
-
-
-    # def train_winning_pipeline(self, winning_pipeline_ind, scoring_metric):
-    #     """
-    #     Trains pipeline, corresponding to a user-provided key, on training
-    #     data, and scores it on the testing data if a test score isn't found.
-    #     """
-    #     winning_pipeline = self.pipelines[winning_pipeline_ind]
-    #
-    #     validation_score = winning_pipeline['validation_score']
-    #
-    #     if not validation_score:
-    #         winning_pipeline['all_trained_pipeline'] = clone(
-    #             winning_pipeline['pipeline']
-    #             )
-    #
-    #         # Train on all inner loop training data
-    #         winning_pipeline['all_trained_pipeline'].fit(self.X_train,
-    #                                                      self.y_train)
-    #
-    #         # Form predictions for validation and training targets
-    #         winning_pipeline['y_validation_pred'] = \
-    #             winning_pipeline['all_trained_pipeline'].predict(self.X_test)
-    #         winning_pipeline['outer_y_train_pred'] = \
-    #             winning_pipeline['all_trained_pipeline'].predict(self.X_train)
-    #
-    #         # Form actually and predicted target comparison pairs
-    #         train_comparison_pair = \
-    #             [self.y_train, winning_pipeline['outer_y_train_pred']]
-    #         test_comparison_pair = \
-    #             [self.y_test, winning_pipeline['y_validation_pred']]
-    #
-    #         # Calculate outer loop training score
-    #         winning_pipeline['outer_train_score'] = \
-    #             PipelineEvaluator().get_score(
-    #                 *train_comparison_pair + [scoring_metric]
-    #                 )
-    #
-    #         # Calculate validation score
-    #         winning_pipeline['validation_score'] = \
-    #             PipelineEvaluator().get_score(
-    #                 *test_comparison_pair + [scoring_metric]
-    #                 )
-    #
-    #         winning_pipeline['test_classification_report'] = \
-    #             PipelineEvaluator().get_classification_report(
-    #                 *test_comparison_pair
-    #                 )
-
     def choose_best_pipelines(self, score_type=None):
         """
         Chooses pipeline with the highest test score
@@ -412,32 +295,6 @@ class OuterFold(Fold):
                      in centrality_measures.iteritems() if score==max_score]
 
         return winner_inds
-
-    def train_best_inner_fold_pipeline(self, best_pipeline_ind):
-        """
-        Sets and trains the best pipeline on the training data of the
-        outer-fold
-
-        Parameters
-        ----------
-        best_pipeline_ind : int
-            Index for pipeline with best measure of centrality (mean or median)
-
-        """
-        ############### Check input ###############
-        if type(best_pipeline_ind) is not int:
-            raise Exception("The best_pipeline_ind positional argument must " \
-                            "be of type int")
-
-        if best_pipeline_ind not in self.pipelines:
-            raise Exception("Pipeline %d does not exist"%(best_pipeline_ind))
-
-        ############### Save best pipeline for this fold ###############
-        self.best_pipeline_ind = best_pipeline_ind
-
-        ############### Train best pipeline ###############
-        self.pipelines[best_pipeline_ind].fit(self.X_train, self.y_train,
-                                              self.X_test, self.y_test)
 
     def collect_inner_loop_scores(self, pipelines, scoring_metric=None,
                                   score_type=None):
