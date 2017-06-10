@@ -88,9 +88,11 @@ class OuterFoldTrainedPipeline(TrainedPipeline):
         # incompatibility
         self.__class__ = OuterFoldTrainedPipeline
 
-        super(OuterFoldTrainedPipeline, self).__init__(pipeline_id=pipeline_id, pipeline=pipeline,
-                                                       scoring_metric=scoring_metric,
-                                                       score_type=score_type)
+        super(OuterFoldTrainedPipeline, self).__init__(
+            pipeline_id=pipeline_id,
+            pipeline=pipeline,
+            scoring_metric=scoring_metric,
+            score_type=score_type)
 
         ############### Initialize addtional fields ###############
         self.inner_loop_test_scores = None

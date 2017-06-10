@@ -115,15 +115,6 @@ class OuterFold(Fold):
 
         self.best_pipeline_ind = None
 
-    def train_winning_pipeline(self, best_pipeline_ind):
-        """
-        Trains ultimate winner of the inner-loop of the nested k-fold cross-
-        validation contest on the training set of this outer loop and scores it
-        based on the previously saved scoring metric.
-        """
-        self.pipelines[best_pipeline_ind].fit(self.X_train, self.y_train,
-                                              self.X_test, self.y_test)
-
     def fit(self, shuffled_X, shuffled_y, pipelines, scoring_metric='auc',
             score_type='median', tie_breaker='choice',
             best_inner_fold_pipeline_ind=None):
@@ -184,6 +175,15 @@ class OuterFold(Fold):
             score_type=score_type,
             tie_breaker=tie_breaker,
             best_inner_fold_pipeline_ind=best_inner_fold_pipeline_ind)
+
+    def train_winning_pipeline(self, best_pipeline_ind):
+        """
+        Trains ultimate winner of the inner-loop of the nested k-fold cross-
+        validation contest on the training set of this outer loop and scores it
+        based on the previously saved scoring metric.
+        """
+        self.pipelines[best_pipeline_ind].fit(self.X_train, self.y_train,
+                                              self.X_test, self.y_test)
 
     def choose_best_inner_fold_pipeline(self, score_type='median',
                                         tie_breaker='choice',
