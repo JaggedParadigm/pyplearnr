@@ -231,7 +231,6 @@ class OuterFold(Fold):
             best_pipeline_inds = \
                 self.choose_best_pipelines(score_type=score_type)
 
-
             ############### Train best pipeline or resolve tie ###############
             # return best_pipeline_inds
             if len(best_pipeline_inds) == 1:
@@ -246,11 +245,12 @@ class OuterFold(Fold):
                     for pipeline_ind in best_pipeline_inds:
                         print pipeline_ind, self.pipelines[pipeline_ind].pipeline
                     print "\n\nNo model was chosen because there is no clear " \
-                          "winner. Please use the choose_best_pipelines method " \
-                          "with one of the indices above." \
+                          "winner. Please use the same fit method with " \
+                          "best_inner_fold_pipeline_inds keyword argument." \
                           "\n\nExample:\tkfcv.fit(X.values, y.values, " \
-                          "pipelines)\n\t\tkfcv.train_best_inner_fold_pipeline" \
-                          "(3, outer_fold_ind=1)"
+                          "pipelines)\n\t\tkfcv.fit(X.values, y.values, " \
+                          "pipelines, \n\t\t\t best_inner_fold_pipeline_inds = "\
+                          "{0:9, 2:3})\n"
                 elif tie_breaker == 'first':
                     best_pipeline_ind = best_pipeline_inds[0]
                     # self.train_best_inner_fold_pipeline(best_pipeline_inds[0])

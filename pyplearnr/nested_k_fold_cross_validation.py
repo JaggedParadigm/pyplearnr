@@ -5,6 +5,7 @@
 # Basic tools
 import numpy as np
 import random
+import re
 
 from sklearn.base import clone
 
@@ -86,17 +87,17 @@ class NestedKFoldCrossValidation(object):
         if not self.shuffle_seed:
             self.shuffle_seed = random.randint(1,5000)
 
-        # Generate seeds if not given (*20 since 5-fold CV results in range
-        # of 1 to 100)
+        # Generate seeds if not given (*200 since 5-fold CV results in range
+        # of 1 to 1000)
         if not self.outer_loop_split_seed:
             self.outer_loop_split_seed = random.randint(
                                             1,
-                                            self.outer_loop_fold_count*20)
+                                            self.outer_loop_fold_count*200)
 
         if not self.inner_loop_split_seeds:
             self.inner_loop_split_seeds = np.random.randint(
                                             1,
-                                            high=self.inner_loop_fold_count*20,
+                                            high=self.inner_loop_fold_count*200,
                                             size=self.outer_loop_fold_count)
 
         ############### Check fields so far ###############
@@ -257,165 +258,200 @@ class NestedKFoldCrossValidation(object):
         outer_fold_winners = [outer_fold.best_pipeline_ind \
             for outer_fold_ind, outer_fold in self.outer_folds.iteritems()]
 
-        # Determine winner of all folds by majority vote
-        counts = {x: outer_fold_winners.count(x) for x in outer_fold_winners}
+        # Check if all folds have winners yet
+        none_flag = False
+        for outer_fold_winner in outer_fold_winners:
+            if outer_fold_winner is None:
+                none_flag = True
 
-        max_count = max([count for x, count in counts.iteritems()])
+        if not none_flag:
+            # Determine winner of all folds by majority vote
+            counts = {x: outer_fold_winners.count(x) for x in outer_fold_winners}
 
-        mode_inds = [x for x, count in counts.iteritems() if count==max_count]
+            max_count = max([count for x, count in counts.iteritems()])
 
-        best_pipeline_ind = None
+            mode_inds = [x for x, count in counts.iteritems() if count==max_count]
 
-        if not best_outer_fold_pipeline:
-            if len(mode_inds) == 1:
-                # Save winner if only one
-                best_pipeline_ind = mode_inds[0]
-            else:
-                if tie_breaker=='choice':
-                    # Encourage user to choose simplest model if there is no clear
-                    # winner
-                    for mode_ind in mode_inds:
-                        print mode_ind, self.pipelines[mode_ind]
-                    print "\n\nNo model was chosen because there is no clear winner. " \
-                          "Please use the same fit method with one of the "\
-                          "indices above.\n\nExample:\tkfcv.fit(X.values, " \
-                          "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"\
-                          "kfcv.fit(X.values, y.values, pipelines, " \
-                          "best_outer_fold_pipeline=9)"
-                elif tie_breaker=='first':
+            best_pipeline_ind = None
+
+            if not best_outer_fold_pipeline:
+                if len(mode_inds) == 1:
+                    # Save winner if only one
                     best_pipeline_ind = mode_inds[0]
-        else:
-            best_pipeline_ind = best_outer_fold_pipeline
+                else:
+                    if tie_breaker=='choice':
+                        # Encourage user to choose simplest model if there is no clear
+                        # winner
+                        for mode_ind in mode_inds:
+                            print mode_ind, self.pipelines[mode_ind]
+                        print "\n\nNo model was chosen because there is no clear winner. " \
+                              "Please use the same fit method with one of the "\
+                              "indices above.\n\nExample:\tkfcv.fit(X.values, " \
+                              "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"\
+                              "kfcv.fit(X.values, y.values, pipelines, " \
+                              "best_outer_fold_pipeline=9)"
+                    elif tie_breaker=='first':
+                        best_pipeline_ind = mode_inds[0]
+            else:
+                best_pipeline_ind = best_outer_fold_pipeline
 
-        if best_pipeline_ind:
-            self.best_pipeline_ind = best_pipeline_ind
-
-    def pick_winning_pipeline(self, tie_breaker='choice'):
-        """
-        Pools winners of outer fold contests and selects ultimate winner by
-        majority vote or by user choice (preferably simplest model for better
-        out-of-sample performance) or some other decision rule,
-
-        Parameters
-        ----------
-        tie_breaker :   str, {'choice', 'first'}
-            Decision rule to use to decide the winner in the event of a tie
-            choice :    Inform the user that they need to use the
-                        choose_best_pipelines method to pick the winner of the
-                        inner loop contest
-            first :     Simply use the first model with the same score
-
-        """
-        # Collect all winning pipelines from each inner loop contest of each
-        # outer fold
-        outer_fold_winners = [outer_fold.best_pipeline_ind \
-            for outer_fold_ind, outer_fold in self.outer_folds.iteritems()]
-
-        # Determine winner of all folds by majority vote
-        counts = {x: outer_fold_winners.count(x) for x in outer_fold_winners}
-
-        max_count = max([count for x, count in counts.iteritems()])
-
-        mode_inds = [x for x, count in counts.iteritems() if count==max_count]
-
-        best_pipeline_ind = None
-
-        if len(mode_inds) == 1:
-            # Save winner if only one
-            best_pipeline_ind = mode_inds[0]
-        else:
-            if tie_breaker=='choice':
-                # Encourage user to choose simplest model if there is no clear
-                # winner
-                for mode_ind in mode_inds:
-                    print mode_ind, self.pipelines[mode_ind]
-                print "\n\nNo model was chosen because there is no clear winner. " \
-                      "Please use the same fit method with one of the "\
-                      "indices above.\n\nExample:\tkfcv.fit(X.values, " \
-                      "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"\
-                      "kfcv.fit(X.values, y.values, pipelines, " \
-                      "best_outer_fold_pipeline=9)"
-            elif tie_breaker=='first':
-                best_pipeline_ind = mode_inds[0]
-
-        if best_pipeline_ind:
-            self.best_pipeline_ind = best_pipeline_ind
+            if best_pipeline_ind:
+                self.best_pipeline_ind = best_pipeline_ind
 
     def print_report(self):
-        print self.get_report()
+        if self.best_pipeline_ind:
+            print self.get_report()
 
     def get_report(self):
         """
         Generates report string
         """
-        # print classification_reports
+        inner_loop_test_scores = self.pipeline.inner_loop_test_scores
+        inner_loop_train_scores = self.pipeline.inner_loop_train_scores
 
-        print self.best_pipeline['validation_scores']
+        ############### Form validation score string ###############
+        validation_str_list = ['%1.5f'%(score) \
+                               for score in inner_loop_test_scores]
 
-        self.best_pipeline['mean_validation_score'] = np.mean(validation_scores)
-        self.best_pipeline['median_validation_score'] = np.median(
-                                                        validation_scores
-                                                        )
-        self.best_pipeline['validation_score_std'] = np.std(validation_scores,
-                                                            ddof=1)
+        validation_score_str = ', '.join(validation_str_list)
 
-        format_str = '{0:20}{1:20}{2:1}{3:<10}'
+        ############### Form validation score quartiles ###############
+        q100, q75, q50, q25, q0 = np.percentile(inner_loop_test_scores,
+                                                [0, 25, 50, 75, 100])
 
-        blank_line = ['','','','']
+        iqr_str = '\t'.join(['%1.5f'%percentile \
+                             for percentile in [q100, q75, q50, q25, q0]])
 
-        pipeline_str = []
-        for step_ind,step in enumerate(
-                                self.best_pipeline['trained_all_pipeline'].steps
-                                ):
-            step_name = step[0]
+        ############### Form pipeline string ###############
+        pipeline_str = '\n'.join(['{}:\n{}\n'.format(*step) \
+                                  for step in self.pipeline.pipeline.steps])
 
-            step_obj = step[1]
+        ############### Build inner/outer-fold scores matrix ###############
+        score_matrix = np.zeros([self.outer_loop_fold_count,
+                                 self.inner_loop_fold_count])
 
-            step_class = step_obj.__class__.__name__
+        outer_fold_inds = []
 
-            numbered_step = '%d: %s'%(step_ind+1, step_name)
+        inner_fold_inds = []
 
-            pipeline_str.append(format_str.format(*[numbered_step,
-                                                    step_class,'','']))
+        # Collect all outer- and inner-fold labels and populate score matrix
+        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+            if outer_fold_ind not in outer_fold_inds:
+                outer_fold_inds.append(outer_fold_ind)
+            for inner_fold_ind, inner_fold in outer_fold.inner_folds.iteritems():
+                if inner_fold_ind not in inner_fold_inds:
+                    inner_fold_inds.append(inner_fold_ind)
+                score = inner_fold.pipelines[ \
+                                        self.best_pipeline_ind].test_scores[0]
 
-            pipeline_str.append(format_str.format(*blank_line)) # Blank line
+                score_matrix[outer_fold_ind, inner_fold_ind] = score
 
-            step_fields = step_obj.get_params(deep=False)
+        # Calculate means, standard deviations, and quartiles
+        means = np.mean(score_matrix, axis=1).reshape(-1,1)
+        stds = np.std(score_matrix, axis=1, ddof=1).reshape(-1,1)
 
-            # Add fields to list of formatted strings
-            step_fields = [format_str.format(*['',field,' = ',field_value]) \
-                                 for field,field_value in step_fields.iteritems()]
+        percentiles = np.percentile(score_matrix, [0, 25, 50, 75, 100],
+                                    axis=1).T
 
-            pipeline_str.append('\n'.join(step_fields))
+        # Concatenate float arrays and convert to strings
+        float_matrix = np.concatenate((score_matrix, means, stds, percentiles),
+                                      axis=1)
 
-            pipeline_str.append(format_str.format(*blank_line))
+        str_matrix = np.zeros(float_matrix.shape)
+        for row_ind, row in enumerate(float_matrix):
+            for col_ind, entry in enumerate(row):
+                str_matrix[row_ind, col_ind] = '%1.5f'%(entry)
 
-        pipeline_str = '\n'.join(pipeline_str)
+        # Form header row array
+        headers = np.array([''] + ['%d'%(inner_fold_ind) \
+                                   for inner_fold_ind in inner_fold_inds] \
+                                   + ['mean', 'std', '0%', '25%', '50%', '75%',
+                                      '100%']).reshape(1,-1)
 
-        if self.scoring_metric == 'rmse':
-            report = (
-            "\nPipeline:\n\n%s\n"
-            "\nTraining L2 norm score: %1.3f"
-            "'\nTest L2 norm score: %1.3f"
-            "\n\nGrid search parameters:\n\n%s\n"
-            )%(pipeline_str,train_score,test_score)
-        else:
-            report = (
-            "\nPipeline:\n\n%s\n"
-            # "\nTraining set classification accuracy:\t%1.3f"
-            "\nTest set classification accuracy:\t%1.3f"
-            # "\n\nConfusion matrix:"
-            # "\n\n%s"
-            # "\n\nNormalized confusion matrix:"
-            # "\n\n%s"
-            # "\n\nClassification report:\n\n%s"
-            # "\n\nGrid search parameters:\n\n%s\n"
+        # Form outer fold index array
+        outer_fold_ind_str = np.array(['%d'%(outer_fold_ind) \
+                          for outer_fold_ind in outer_fold_inds]).reshape(-1,1)
 
-            )%(pipeline_str,self.best_pipeline['median_validation_score'])#,
-            #    np.array_str(confusion_matrix),np.array_str(normalized_confusion_matrix),
-            #    classification_report)
+        # Concatenate to form final matrix
+        final_matrix = np.concatenate((headers,
+                                       np.concatenate((
+                                            outer_fold_ind_str,
+                                            str_matrix),axis=1)),axis=0)
 
-        return report
+        # Form matrix string
+        matrix_str = []
+        for row in final_matrix:
+            matrix_str.append('\t'.join(row))
+
+        # Form headers for validation section
+        short_headers = headers[0][1:]
+
+        ############### Form and print report ###############
+        str_inputs = {
+            'divider': 90*'-',
+            'best_pipeline_ind': self.best_pipeline_ind,
+            'pipeline': pipeline_str,
+            'validation_scores': validation_score_str,
+            'mean': '%1.5f'%(np.mean(inner_loop_test_scores)),
+            'std': '%1.5f'%(np.std(inner_loop_test_scores, ddof=1)),
+            'median': np.median(inner_loop_test_scores),
+            'iqr': iqr_str,
+            'test_matrix': '\n'.join(matrix_str),
+            'outer_loop_fold_count': self.outer_loop_fold_count,
+            'inner_loop_fold_count': self.inner_loop_fold_count,
+            'shuffle_seed': self.shuffle_seed,
+            'outer_loop_split_seed': self.outer_loop_split_seed,
+            'inner_loop_split_seeds': ', '.join(['%d'%(seed) \
+                                     for seed in self.inner_loop_split_seeds]),
+            'scoring_metric': self.scoring_metric,
+            'score_type': self.score_type,
+            'short_headers': '\t'.join(short_headers),
+            'tab_validation_scores': '\t'.join(validation_str_list)
+        }
+
+        report_str = \
+        """
+        {divider}
+        Best pipeline:\t\t{best_pipeline_ind}
+        {divider}
+
+        {divider}
+        Validation performance
+        ----------------------
+        {short_headers}
+        {tab_validation_scores}\t{mean}\t{std}\t{iqr}
+
+        {divider}
+        Pipeline steps
+        ---------------
+        {pipeline}
+
+        {divider}
+        Inter-loop performance
+        -----------------------
+        {test_matrix}
+
+        {divider}
+        Nested k-fold cross-validation parameters
+        -----------------------------------------
+        scoring metric:\t\t\t{scoring_metric}
+
+        scoring type:\t\t\t{score_type}
+
+        outer-fold count:\t\t{outer_loop_fold_count}
+        inner-fold count:\t\t{inner_loop_fold_count}
+
+        shuffle seed:\t\t\t{shuffle_seed}
+        outer-loop split seed:\t\t{outer_loop_split_seed}
+        inner-loop split seeds:\t\t{inner_loop_split_seeds}
+        {divider}
+
+        """.format(**str_inputs)
+
+        # Replace extra spaces resulting from indentation
+        report_str = re.sub('\n        ', '\n', report_str)
+
+        return report_str
 
     def shuffle_data(self):
         """
