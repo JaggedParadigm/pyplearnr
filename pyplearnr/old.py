@@ -1,3 +1,42 @@
+# Basic tools
+import itertools
+import numpy as np
+import pandas as pd
+
+# Scalers
+from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import Normalizer
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import Binarizer
+
+# Feature selection tools
+from sklearn.feature_selection import SelectKBest, f_classif
+
+# Unsupervised learning tools
+from sklearn.decomposition import PCA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+from sklearn.manifold import TSNE
+
+# Classifiers
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC, LinearSVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import AdaBoostClassifier
+
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV
+
+import sklearn.metrics as sklearn_metrics
+
+# Regression tools
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+
+from sklearn.pipeline import Pipeline
+
 # Define custom TSNE class so that it will work with pipeline
 class pipeline_TSNE(TSNE):
     def transform(self,X):

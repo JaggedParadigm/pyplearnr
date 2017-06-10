@@ -67,9 +67,6 @@ class PipelineEvaluator(object):
 
         return score
 
-    def get_classification_report(self, y, y_pred):
-        return classification_report(y, y_pred)
-
     def metric_supported(self, metric):
         """
         Tells whether estimator scoring metric (Ex: 'auc') is currently
