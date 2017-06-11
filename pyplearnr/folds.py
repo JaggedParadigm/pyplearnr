@@ -115,15 +115,6 @@ class OuterFold(Fold):
 
         self.best_pipeline_ind = None
 
-    def train_winning_pipeline(self, best_pipeline_ind):
-        """
-        Trains ultimate winner of the inner-loop of the nested k-fold cross-
-        validation contest on the training set of this outer loop and scores it
-        based on the previously saved scoring metric.
-        """
-        self.pipelines[best_pipeline_ind].fit(self.X_train, self.y_train,
-                                              self.X_test, self.y_test)
-
     def fit(self, shuffled_X, shuffled_y, pipelines, scoring_metric='auc',
             score_type='median', tie_breaker='choice',
             best_inner_fold_pipeline_ind=None):
@@ -185,6 +176,15 @@ class OuterFold(Fold):
             tie_breaker=tie_breaker,
             best_inner_fold_pipeline_ind=best_inner_fold_pipeline_ind)
 
+    def train_winning_pipeline(self, best_pipeline_ind):
+        """
+        Trains ultimate winner of the inner-loop of the nested k-fold cross-
+        validation contest on the training set of this outer loop and scores it
+        based on the previously saved scoring metric.
+        """
+        self.pipelines[best_pipeline_ind].fit(self.X_train, self.y_train,
+                                              self.X_test, self.y_test)
+
     def choose_best_inner_fold_pipeline(self, score_type='median',
                                         tie_breaker='choice',
                                         best_inner_fold_pipeline_ind=None):
@@ -214,7 +214,7 @@ class OuterFold(Fold):
         """
         best_pipeline_ind = None
 
-        if not best_inner_fold_pipeline_ind:
+        if best_inner_fold_pipeline_ind is None:
             ############### Check inputs ###############
             if score_type not in ['mean', 'median']:
                 raise Exception("The keyword argument used to designate the " \
@@ -236,7 +236,6 @@ class OuterFold(Fold):
             if len(best_pipeline_inds) == 1:
                 # Save winner if only one best_pipeline_ind, outer_fold_ind
                 best_pipeline_ind = best_pipeline_inds[0]
-                # self.train_best_inner_fold_pipeline(best_pipeline_inds[0])
             else:
                 if tie_breaker=='choice':
                     # Encourage user to choose simplest model if there is no clear
@@ -253,12 +252,10 @@ class OuterFold(Fold):
                           "{0:9, 2:3})\n"
                 elif tie_breaker == 'first':
                     best_pipeline_ind = best_pipeline_inds[0]
-                    # self.train_best_inner_fold_pipeline(best_pipeline_inds[0])
         else:
             best_pipeline_ind = best_inner_fold_pipeline_ind
-            # self.train_best_inner_fold_pipeline(best_inner_fold_pipeline_ind)
 
-        if best_pipeline_ind:
+        if best_pipeline_ind is not None:
             self.best_pipeline_ind = best_pipeline_ind
 
     def choose_best_pipelines(self, score_type=None):
