@@ -174,8 +174,6 @@ class NestedKFoldCrossValidation(object):
                         scoring_metric=self.scoring_metric,
                         best_inner_fold_pipeline_ind=best_pipeline_ind)
 
-        
-
         ############### Choose best outer fold pipeline ###############
         self.choose_best_outer_fold_pipeline(
             tie_breaker=tie_breaker,
@@ -187,6 +185,13 @@ class NestedKFoldCrossValidation(object):
         ############### Train production pipeline ###############
         self.train_production_pipeline()
 
+        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+            print 'yay', outer_fold_ind, outer_fold.best_pipeline_ind
+            print outer_fold.pipelines[self.best_pipeline_ind].test_scores
+
+        print self.best_pipeline_ind
+
+
         self.print_report()
 
     def train_production_pipeline(self):
@@ -196,7 +201,7 @@ class NestedKFoldCrossValidation(object):
         """
         best_pipeline_ind = self.best_pipeline_ind
 
-        if best_pipeline_ind:
+        if best_pipeline_ind is not None:
             ############### Initialize production pipeline ###############
             pipeline_kwargs = {
             'pipeline_id': best_pipeline_ind,
@@ -234,7 +239,7 @@ class NestedKFoldCrossValidation(object):
         nested k-fold cross-validation inner loop contest if a winner has
         been chosen (self.best_pipeline_ind is set)
         """
-        if self.best_pipeline_ind:
+        if self.best_pipeline_ind is not None:
             for outer_fold in self.outer_folds.values():
                 outer_fold.train_winning_pipeline(self.best_pipeline_ind)
 
@@ -266,6 +271,7 @@ class NestedKFoldCrossValidation(object):
             if outer_fold_winner is None:
                 none_flag = True
 
+        print 'no ho', outer_fold_winners
         if not none_flag:
             # Determine winner of all folds by majority vote
             counts = {x: outer_fold_winners.count(x) for x in outer_fold_winners}
@@ -276,12 +282,17 @@ class NestedKFoldCrossValidation(object):
 
             best_pipeline_ind = None
 
-            if not best_outer_fold_pipeline:
+            print 'no ho', outer_fold_winners, counts, max_count, mode_inds, best_outer_fold_pipeline, best_outer_fold_pipeline is not None
+            if best_outer_fold_pipeline is None:
+                print '1'
                 if len(mode_inds) == 1:
+                    print '1-1'
                     # Save winner if only one
                     best_pipeline_ind = mode_inds[0]
                 else:
+                    print '1-2'
                     if tie_breaker=='choice':
+                        print '1-2-1'
                         # Encourage user to choose simplest model if there is no clear
                         # winner
                         for mode_ind in mode_inds:
@@ -293,11 +304,15 @@ class NestedKFoldCrossValidation(object):
                               "kfcv.fit(X.values, y.values, pipelines, " \
                               "best_outer_fold_pipeline=9)"
                     elif tie_breaker=='first':
+                        print '1-2-2'
                         best_pipeline_ind = mode_inds[0]
             else:
+                print '2'
                 best_pipeline_ind = best_outer_fold_pipeline
 
-            if best_pipeline_ind:
+            if best_pipeline_ind is not None:
+                print '3'
+
                 self.best_pipeline_ind = best_pipeline_ind
 
     def shuffle_data(self):
@@ -419,7 +434,7 @@ class NestedKFoldCrossValidation(object):
                 "value vector, y, if given."
 
     def print_report(self):
-        if self.best_pipeline_ind:
+        if self.best_pipeline_ind is not None:
             print self.get_report()
 
     def get_report(self):
