@@ -185,6 +185,7 @@ class NestedKFoldCrossValidation(object):
         ############### Train production pipeline ###############
         self.train_production_pipeline()
 
+        ############### Output report ###############
         self.print_report()
 
     def train_production_pipeline(self):
@@ -194,7 +195,7 @@ class NestedKFoldCrossValidation(object):
         """
         best_pipeline_ind = self.best_pipeline_ind
 
-        if best_pipeline_ind:
+        if best_pipeline_ind is not None:
             ############### Initialize production pipeline ###############
             pipeline_kwargs = {
             'pipeline_id': best_pipeline_ind,
@@ -232,7 +233,7 @@ class NestedKFoldCrossValidation(object):
         nested k-fold cross-validation inner loop contest if a winner has
         been chosen (self.best_pipeline_ind is set)
         """
-        if self.best_pipeline_ind:
+        if self.best_pipeline_ind is not None:
             for outer_fold in self.outer_folds.values():
                 outer_fold.train_winning_pipeline(self.best_pipeline_ind)
 
@@ -264,6 +265,7 @@ class NestedKFoldCrossValidation(object):
             if outer_fold_winner is None:
                 none_flag = True
 
+
         if not none_flag:
             # Determine winner of all folds by majority vote
             counts = {x: outer_fold_winners.count(x) for x in outer_fold_winners}
@@ -274,7 +276,7 @@ class NestedKFoldCrossValidation(object):
 
             best_pipeline_ind = None
 
-            if not best_outer_fold_pipeline:
+            if best_outer_fold_pipeline is None:
                 if len(mode_inds) == 1:
                     # Save winner if only one
                     best_pipeline_ind = mode_inds[0]
@@ -295,163 +297,8 @@ class NestedKFoldCrossValidation(object):
             else:
                 best_pipeline_ind = best_outer_fold_pipeline
 
-            if best_pipeline_ind:
+            if best_pipeline_ind is not None:
                 self.best_pipeline_ind = best_pipeline_ind
-
-    def print_report(self):
-        if self.best_pipeline_ind:
-            print self.get_report()
-
-    def get_report(self):
-        """
-        Generates report string
-        """
-        inner_loop_test_scores = self.pipeline.inner_loop_test_scores
-        inner_loop_train_scores = self.pipeline.inner_loop_train_scores
-
-        ############### Form validation score string ###############
-        validation_str_list = ['%1.5f'%(score) \
-                               for score in inner_loop_test_scores]
-
-        validation_score_str = ', '.join(validation_str_list)
-
-        ############### Form validation score quartiles ###############
-        q100, q75, q50, q25, q0 = np.percentile(inner_loop_test_scores,
-                                                [0, 25, 50, 75, 100])
-
-        iqr_str = '\t'.join(['%1.5f'%percentile \
-                             for percentile in [q100, q75, q50, q25, q0]])
-
-        ############### Form pipeline string ###############
-        pipeline_str = '\n'.join(['{}:\n{}\n'.format(*step) \
-                                  for step in self.pipeline.pipeline.steps])
-
-        ############### Build inner/outer-fold scores matrix ###############
-        score_matrix = np.zeros([self.outer_loop_fold_count,
-                                 self.inner_loop_fold_count])
-
-        outer_fold_inds = []
-
-        inner_fold_inds = []
-
-        # Collect all outer- and inner-fold labels and populate score matrix
-        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
-            if outer_fold_ind not in outer_fold_inds:
-                outer_fold_inds.append(outer_fold_ind)
-            for inner_fold_ind, inner_fold in outer_fold.inner_folds.iteritems():
-                if inner_fold_ind not in inner_fold_inds:
-                    inner_fold_inds.append(inner_fold_ind)
-                score = inner_fold.pipelines[ \
-                                        self.best_pipeline_ind].test_scores[0]
-
-                score_matrix[outer_fold_ind, inner_fold_ind] = score
-
-        # Calculate means, standard deviations, and quartiles
-        means = np.mean(score_matrix, axis=1).reshape(-1,1)
-        stds = np.std(score_matrix, axis=1, ddof=1).reshape(-1,1)
-
-        percentiles = np.percentile(score_matrix, [0, 25, 50, 75, 100],
-                                    axis=1).T
-
-        # Concatenate float arrays and convert to strings
-        float_matrix = np.concatenate((score_matrix, means, stds, percentiles),
-                                      axis=1)
-
-        str_matrix = np.zeros(float_matrix.shape)
-        for row_ind, row in enumerate(float_matrix):
-            for col_ind, entry in enumerate(row):
-                str_matrix[row_ind, col_ind] = '%1.5f'%(entry)
-
-        # Form header row array
-        headers = np.array([''] + ['%d'%(inner_fold_ind) \
-                                   for inner_fold_ind in inner_fold_inds] \
-                                   + ['mean', 'std', '0%', '25%', '50%', '75%',
-                                      '100%']).reshape(1,-1)
-
-        # Form outer fold index array
-        outer_fold_ind_str = np.array(['%d'%(outer_fold_ind) \
-                          for outer_fold_ind in outer_fold_inds]).reshape(-1,1)
-
-        # Concatenate to form final matrix
-        final_matrix = np.concatenate((headers,
-                                       np.concatenate((
-                                            outer_fold_ind_str,
-                                            str_matrix),axis=1)),axis=0)
-
-        # Form matrix string
-        matrix_str = []
-        for row in final_matrix:
-            matrix_str.append('\t'.join(row))
-
-        # Form headers for validation section
-        short_headers = headers[0][1:]
-
-        ############### Form and print report ###############
-        str_inputs = {
-            'divider': 90*'-',
-            'best_pipeline_ind': self.best_pipeline_ind,
-            'pipeline': pipeline_str,
-            'validation_scores': validation_score_str,
-            'mean': '%1.5f'%(np.mean(inner_loop_test_scores)),
-            'std': '%1.5f'%(np.std(inner_loop_test_scores, ddof=1)),
-            'median': np.median(inner_loop_test_scores),
-            'iqr': iqr_str,
-            'test_matrix': '\n'.join(matrix_str),
-            'outer_loop_fold_count': self.outer_loop_fold_count,
-            'inner_loop_fold_count': self.inner_loop_fold_count,
-            'shuffle_seed': self.shuffle_seed,
-            'outer_loop_split_seed': self.outer_loop_split_seed,
-            'inner_loop_split_seeds': ', '.join(['%d'%(seed) \
-                                     for seed in self.inner_loop_split_seeds]),
-            'scoring_metric': self.scoring_metric,
-            'score_type': self.score_type,
-            'short_headers': '\t'.join(short_headers),
-            'tab_validation_scores': '\t'.join(validation_str_list)
-        }
-
-        report_str = \
-        """
-        {divider}
-        Best pipeline:\t\t{best_pipeline_ind}
-        {divider}
-
-        {divider}
-        Validation performance
-        ----------------------
-        {short_headers}
-        {tab_validation_scores}\t{mean}\t{std}\t{iqr}
-
-        {divider}
-        Pipeline steps
-        ---------------
-        {pipeline}
-
-        {divider}
-        Inter-loop performance
-        -----------------------
-        {test_matrix}
-
-        {divider}
-        Nested k-fold cross-validation parameters
-        -----------------------------------------
-        scoring metric:\t\t\t{scoring_metric}
-
-        scoring type:\t\t\t{score_type}
-
-        outer-fold count:\t\t{outer_loop_fold_count}
-        inner-fold count:\t\t{inner_loop_fold_count}
-
-        shuffle seed:\t\t\t{shuffle_seed}
-        outer-loop split seed:\t\t{outer_loop_split_seed}
-        inner-loop split seeds:\t\t{inner_loop_split_seeds}
-        {divider}
-
-        """.format(**str_inputs)
-
-        # Replace extra spaces resulting from indentation
-        report_str = re.sub('\n        ', '\n', report_str)
-
-        return report_str
 
     def shuffle_data(self):
         """
@@ -570,3 +417,257 @@ class NestedKFoldCrossValidation(object):
             assert X.shape[0] == y.shape[0], "The number of rows of the " \
                 "feature matrix, X, must match the length of the target " \
                 "value vector, y, if given."
+
+    def print_report(self):
+        if self.best_pipeline_ind is not None:
+            print self.get_report()
+
+    def get_report(self):
+        """
+        Generates report string
+        """
+        inner_loop_test_scores = self.pipeline.inner_loop_test_scores
+        inner_loop_train_scores = self.pipeline.inner_loop_train_scores
+
+        ############### Form validation score string ###############
+        validation_str_list = ['%1.5f'%(score) \
+                               for score in inner_loop_test_scores]
+
+        validation_score_str = ', '.join(validation_str_list)
+
+        ############### Form validation score quartiles ###############
+        q100, q75, q50, q25, q0 = np.percentile(inner_loop_test_scores,
+                                                [0, 25, 50, 75, 100])
+
+        iqr_str = '\t'.join(['%1.5f'%percentile \
+                             for percentile in [q100, q75, q50, q25, q0]])
+
+        ############### Form pipeline string ###############
+        pipeline_str = '\n'.join(['{}:\n{}\n'.format(*step) \
+                                  for step in self.pipeline.pipeline.steps])
+
+        ############### Build inner/outer-fold scores matrix ###############
+        score_matrix = np.zeros([self.outer_loop_fold_count,
+                                 self.inner_loop_fold_count])
+
+        outer_fold_inds = []
+
+        inner_fold_inds = []
+
+        # Collect all outer- and inner-fold labels and populate score matrix
+        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+            if outer_fold_ind not in outer_fold_inds:
+                outer_fold_inds.append(outer_fold_ind)
+            for inner_fold_ind, inner_fold in outer_fold.inner_folds.iteritems():
+                if inner_fold_ind not in inner_fold_inds:
+                    inner_fold_inds.append(inner_fold_ind)
+                score = inner_fold.pipelines[ \
+                                        self.best_pipeline_ind].test_scores[0]
+
+                score_matrix[outer_fold_ind, inner_fold_ind] = score
+
+        # Calculate means, standard deviations, and quartiles
+        means = np.mean(score_matrix, axis=1).reshape(-1,1)
+        stds = np.std(score_matrix, axis=1, ddof=1).reshape(-1,1)
+
+        percentiles = np.percentile(score_matrix, [0, 25, 50, 75, 100],
+                                    axis=1).T
+
+        # Concatenate float arrays and convert to strings
+        float_matrix = np.concatenate((score_matrix, means, stds, percentiles),
+                                      axis=1)
+
+        str_matrix = np.zeros(float_matrix.shape)
+        for row_ind, row in enumerate(float_matrix):
+            for col_ind, entry in enumerate(row):
+                str_matrix[row_ind, col_ind] = '%1.5f'%(entry)
+
+        # Form header row array
+        headers = np.array([''] + ['%d'%(inner_fold_ind) \
+                                   for inner_fold_ind in inner_fold_inds] \
+                                   + ['mean', 'std', '0%', '25%', '50%', '75%',
+                                      '100%']).reshape(1,-1)
+
+        # Form outer fold index array
+        outer_fold_ind_str = np.array(['%d'%(outer_fold_ind) \
+                          for outer_fold_ind in outer_fold_inds]).reshape(-1,1)
+
+        # Concatenate to form final matrix
+        final_matrix = np.concatenate((headers,
+                                       np.concatenate((
+                                            outer_fold_ind_str,
+                                            str_matrix),axis=1)),axis=0)
+
+        # Form matrix string
+        matrix_str = []
+        for row in final_matrix:
+            matrix_str.append('\t'.join(row))
+
+
+
+
+
+
+
+
+        # Form headers for validation section
+        short_headers = ['0%', '25%', '50%', '75%', '100%', 'mean', 'std']
+
+        quartile_headers = ['0%', '25%', '50%', '75%', '100%']
+        mean_based_headers = ['mean', 'std']
+        outer_fold_headers = ['%d'%(outer_fold_ind) \
+                              for outer_fold_ind in outer_fold_inds]
+
+        # Get validation scores and their mean, std, and quartiles
+        validation_scores = inner_loop_test_scores
+        validation_mean = np.mean(inner_loop_test_scores)
+        validation_std = np.std(inner_loop_test_scores, ddof=1)
+
+        validation_quartiles = np.percentile(inner_loop_test_scores,
+                                                [0, 25, 50, 75, 100])
+
+        # Calculate means, standard deviations, and quartiles
+        means = np.mean(score_matrix, axis=1)
+        stds = np.std(score_matrix, axis=1, ddof=1)
+
+        quartiles = np.percentile(score_matrix, [0, 25, 50, 75, 100],
+                                    axis=1)
+
+        # Initialize data report
+        data_report = []
+
+        # Form base header and data row format strings
+        header_str = '{0:<4}{1:>10}{2:>15}'
+        data_row_str = '{0:<4}{1:>10.4f}{2:>15}'
+
+        # Add additional columns based on number of outer folds
+        inner_loop_contest_headers = ['','','']
+        for outer_fold_ind_ind, outer_fold_ind in enumerate(outer_fold_inds):
+            inner_loop_contest_headers.append('OF%d'%(outer_fold_ind))
+
+            header_str += '{%d:>10}'%(outer_fold_ind_ind+3)
+
+            data_row_str += '{%d:>10.4}'%(outer_fold_ind_ind+3)
+
+        # Add quartile data rows
+        data_report.append(header_str.format(*inner_loop_contest_headers))
+
+        for quartile_header_ind, quartile_header in enumerate(quartile_headers):
+            row_values = [quartile_header, validation_quartiles[quartile_header_ind], quartile_header]
+
+            for outer_fold_quartile_score in quartiles[quartile_header_ind]:
+                row_values.append(outer_fold_quartile_score)
+            data_report.append(data_row_str.format(*row_values))
+
+        # Start mean data rows
+        row_values = ['mean', validation_mean, 'mean']
+
+        for outer_fold_mean_score in means:
+            row_values.append(outer_fold_mean_score)
+
+        data_report.append(data_row_str.format(*row_values))
+
+        row_values = ['std', validation_std, 'std']
+        for outer_fold_score_std in stds:
+            row_values.append(outer_fold_score_std)
+
+        data_report.append(data_row_str.format(*row_values))
+
+        # Fill rows where there are both validation and inner fold scores
+        outer_fold_count = len(outer_fold_inds)
+
+        inner_fold_count = len(inner_fold_inds)
+
+        outer_fold_ind = 0
+        inner_fold_ind = 0
+        while outer_fold_ind <= outer_fold_count-1 and inner_fold_ind <= inner_fold_count-1:
+            row_values = ['OF%d'%(outer_fold_ind),
+                          validation_scores[outer_fold_ind],
+                          'IF%d'%(inner_fold_ind)]
+
+            for outer_inner_fold_score in score_matrix.T[inner_fold_ind]:
+                row_values.append(outer_inner_fold_score)
+
+            data_report.append(data_row_str.format(*row_values))
+
+            inner_fold_ind += 1
+            outer_fold_ind += 1
+
+        if outer_fold_ind <= outer_fold_count-1: # Still more outer folds
+            while outer_fold_ind <= outer_fold_count-1:
+                row_values = ['OF%d'%(outer_fold_ind),
+                              validation_scores[outer_fold_ind],
+                              '']
+
+                for outer_inner_fold_score in score_matrix.T[inner_fold_ind]:
+                    row_values.append('')
+
+                data_report.append(data_row_str.format(*row_values))
+
+                outer_fold_ind += 1
+        elif inner_fold_ind <= inner_fold_count-1: # Still more innerfolds
+            while inner_fold_ind <= inner_fold_count-1:
+
+                row_values = ['',
+                              '',
+                              'IF%d'%(inner_fold_ind)]
+
+                for outer_inner_fold_score in score_matrix.T[inner_fold_ind]:
+                    row_values.append(outer_inner_fold_score)
+
+                data_report.append(data_row_str.format(*row_values))
+
+                inner_fold_ind += 1
+
+
+        ############### Form and print report ###############
+        str_inputs = {
+            'data_report': '\n'.join(data_report),
+            'divider': 90*'-',
+            'best_pipeline_ind': self.best_pipeline_ind,
+            'pipeline': pipeline_str,
+            'outer_loop_fold_count': self.outer_loop_fold_count,
+            'inner_loop_fold_count': self.inner_loop_fold_count,
+            'shuffle_seed': self.shuffle_seed,
+            'outer_loop_split_seed': self.outer_loop_split_seed,
+            'inner_loop_split_seeds': ', '.join(['%d'%(seed) \
+                                     for seed in self.inner_loop_split_seeds]),
+            'scoring_metric': self.scoring_metric,
+            'score_type': self.score_type,
+        }
+
+        report_str = \
+        """
+        {divider}
+        Best pipeline:\t\t{best_pipeline_ind}
+        {divider}
+        ----------------------  -----------------------------------
+        Validation performance  Inter-loop test performance
+        ----------------------  -----------------------------------
+        {data_report}
+        ----------------------  -----------------------------------
+        {divider}
+        Pipeline steps
+        ---------------
+        {pipeline}
+        {divider}
+        Nested k-fold cross-validation parameters
+        -----------------------------------------
+        scoring metric:\t\t\t{scoring_metric}
+
+        scoring type:\t\t\t{score_type}
+
+        outer-fold count:\t\t{outer_loop_fold_count}
+        inner-fold count:\t\t{inner_loop_fold_count}
+
+        shuffle seed:\t\t\t{shuffle_seed}
+        outer-loop split seed:\t\t{outer_loop_split_seed}
+        inner-loop split seeds:\t\t{inner_loop_split_seeds}
+        {divider}
+
+        """.format(**str_inputs)
+
+        # Replace extra spaces resulting from indentation
+        report_str = re.sub('\n        ', '\n', report_str)
+
+        return report_str

@@ -64,6 +64,9 @@ class PipelineEvaluator(object):
 
             # Calculate the area under the curve
             score =  sklearn_metrics.auc(false_positive_rate, true_positive_rate)
+        elif scoring_metric == 'rmse':
+            # Calculate the root mean square error
+            score = -np.sqrt(sklearn_metrics.mean_squared_error(y, y_pred))
 
         return score
 
@@ -83,7 +86,7 @@ class PipelineEvaluator(object):
             False : if the metric is not supported
 
         """
-        supported_metrics = ['auc']
+        supported_metrics = ['auc', 'rmse']
 
         if metric:
             if metric in supported_metrics:

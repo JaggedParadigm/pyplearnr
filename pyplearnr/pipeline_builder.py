@@ -100,15 +100,24 @@ class PipelineBuilder(object):
                                         for pair in zip(parameter_names,
                                                         parameter_combo)}
 
+
                     if step_option != 'none':
-                        step = (step_name, sklearn_packages[step_name][step_option](**parameter_kwargs))
+                        step = (step_name,
+                                sklearn_packages[step_name][step_option](
+                                    **parameter_kwargs))
 
                         step_iterations.append(step)
+                    else:
+                        step_iterations.append(None)
 
             pipeline_options.append(step_iterations)
 
-        # Form all step/parameter permutations and convert to scikit-learn pipelines
-        pipelines = [Pipeline(x) for x in itertools.product(*pipeline_options)]
+        # Form all step/parameter permutations and convert to scikit-learn
+        # pipelines
+        pipelines = []
+        for pipeline_skeleton in itertools.product(*pipeline_options):
+            pipelines.append(Pipeline([step for step in pipeline_skeleton \
+                                       if step]))
 
         return pipelines
 
@@ -130,11 +139,14 @@ class PipelineBuilder(object):
                 'pca': PCA
         #         't-sne': pipeline_TSNE(n_components=2, init='pca')
             },
+            'pre_estimator': {
+                'polynomial_features': PolynomialFeatures
+            },
             'estimator': {
                 'knn': KNeighborsClassifier,
                 'logistic_regression': LogisticRegression,
                 'svm': SVC,
-        #         'polynomial_regression': PolynomialFeatures(), Need to find a different solution for polynomial regression
+                'linear_regression': LinearRegression,
                 'multilayer_perceptron': MLPClassifier,
                 'random_forest': RandomForestClassifier,
                 'adaboost': AdaBoostClassifier
