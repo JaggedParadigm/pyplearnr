@@ -429,29 +429,16 @@ class NestedKFoldCrossValidation(object):
         inner_loop_test_scores = self.pipeline.inner_loop_test_scores
         inner_loop_train_scores = self.pipeline.inner_loop_train_scores
 
-        ############### Form validation score string ###############
-        validation_str_list = ['%1.5f'%(score) \
-                               for score in inner_loop_test_scores]
-
-        validation_score_str = ', '.join(validation_str_list)
-
-        ############### Form validation score quartiles ###############
-        q100, q75, q50, q25, q0 = np.percentile(inner_loop_test_scores,
-                                                [0, 25, 50, 75, 100])
-
-        iqr_str = '\t'.join(['%1.5f'%percentile \
-                             for percentile in [q100, q75, q50, q25, q0]])
-
         ############### Form pipeline string ###############
         pipeline_str = '\n'.join(['{}:\n{}\n'.format(*step) \
                                   for step in self.pipeline.pipeline.steps])
+
 
         ############### Build inner/outer-fold scores matrix ###############
         score_matrix = np.zeros([self.outer_loop_fold_count,
                                  self.inner_loop_fold_count])
 
         outer_fold_inds = []
-
         inner_fold_inds = []
 
         # Collect all outer- and inner-fold labels and populate score matrix
@@ -465,50 +452,6 @@ class NestedKFoldCrossValidation(object):
                                         self.best_pipeline_ind].test_scores[0]
 
                 score_matrix[outer_fold_ind, inner_fold_ind] = score
-
-        # Calculate means, standard deviations, and quartiles
-        means = np.mean(score_matrix, axis=1).reshape(-1,1)
-        stds = np.std(score_matrix, axis=1, ddof=1).reshape(-1,1)
-
-        percentiles = np.percentile(score_matrix, [0, 25, 50, 75, 100],
-                                    axis=1).T
-
-        # Concatenate float arrays and convert to strings
-        float_matrix = np.concatenate((score_matrix, means, stds, percentiles),
-                                      axis=1)
-
-        str_matrix = np.zeros(float_matrix.shape)
-        for row_ind, row in enumerate(float_matrix):
-            for col_ind, entry in enumerate(row):
-                str_matrix[row_ind, col_ind] = '%1.5f'%(entry)
-
-        # Form header row array
-        headers = np.array([''] + ['%d'%(inner_fold_ind) \
-                                   for inner_fold_ind in inner_fold_inds] \
-                                   + ['mean', 'std', '0%', '25%', '50%', '75%',
-                                      '100%']).reshape(1,-1)
-
-        # Form outer fold index array
-        outer_fold_ind_str = np.array(['%d'%(outer_fold_ind) \
-                          for outer_fold_ind in outer_fold_inds]).reshape(-1,1)
-
-        # Concatenate to form final matrix
-        final_matrix = np.concatenate((headers,
-                                       np.concatenate((
-                                            outer_fold_ind_str,
-                                            str_matrix),axis=1)),axis=0)
-
-        # Form matrix string
-        matrix_str = []
-        for row in final_matrix:
-            matrix_str.append('\t'.join(row))
-
-
-
-
-
-
-
 
         # Form headers for validation section
         short_headers = ['0%', '25%', '50%', '75%', '100%', 'mean', 'std']
@@ -537,8 +480,13 @@ class NestedKFoldCrossValidation(object):
         data_report = []
 
         # Form base header and data row format strings
-        header_str = '{0:<4}{1:>10}{2:>15}'
-        data_row_str = '{0:<4}{1:>10.4f}{2:>15}'
+        header_str = '{0:>4}{1:>10}{2:>15}'
+        data_row_str = '{0:>4}{1:>10.4}{2:>15}'
+
+        # Form in-report dividers based on number of outer folds
+        data_report_divider = '----------------------  ------'
+
+        data_report_divider += (10*len(outer_fold_inds))*'-'
 
         # Add additional columns based on number of outer folds
         inner_loop_contest_headers = ['','','']
@@ -559,6 +507,10 @@ class NestedKFoldCrossValidation(object):
                 row_values.append(outer_fold_quartile_score)
             data_report.append(data_row_str.format(*row_values))
 
+
+        data_report.append(data_report_divider)
+
+
         # Start mean data rows
         row_values = ['mean', validation_mean, 'mean']
 
@@ -572,6 +524,8 @@ class NestedKFoldCrossValidation(object):
             row_values.append(outer_fold_score_std)
 
         data_report.append(data_row_str.format(*row_values))
+
+        data_report.append(data_report_divider)
 
         # Fill rows where there are both validation and inner fold scores
         outer_fold_count = len(outer_fold_inds)
@@ -597,10 +551,10 @@ class NestedKFoldCrossValidation(object):
             while outer_fold_ind <= outer_fold_count-1:
                 row_values = ['OF%d'%(outer_fold_ind),
                               validation_scores[outer_fold_ind],
-                              '']
+                              '-']
 
-                for outer_inner_fold_score in score_matrix.T[inner_fold_ind]:
-                    row_values.append('')
+                for outer_inner_fold_score in score_matrix.T[inner_fold_ind-1]:
+                    row_values.append('-')
 
                 data_report.append(data_row_str.format(*row_values))
 
@@ -608,8 +562,8 @@ class NestedKFoldCrossValidation(object):
         elif inner_fold_ind <= inner_fold_count-1: # Still more innerfolds
             while inner_fold_ind <= inner_fold_count-1:
 
-                row_values = ['',
-                              '',
+                row_values = ['-',
+                              '-',
                               'IF%d'%(inner_fold_ind)]
 
                 for outer_inner_fold_score in score_matrix.T[inner_fold_ind]:
@@ -623,7 +577,8 @@ class NestedKFoldCrossValidation(object):
         ############### Form and print report ###############
         str_inputs = {
             'data_report': '\n'.join(data_report),
-            'divider': 90*'-',
+            'data_report_divider': data_report_divider,
+            'divider': 80*'-',
             'best_pipeline_ind': self.best_pipeline_ind,
             'pipeline': pipeline_str,
             'outer_loop_fold_count': self.outer_loop_fold_count,
@@ -639,13 +594,13 @@ class NestedKFoldCrossValidation(object):
         report_str = \
         """
         {divider}
-        Best pipeline:\t\t{best_pipeline_ind}
+        Best pipeline: {best_pipeline_ind}
         {divider}
-        ----------------------  -----------------------------------
-        Validation performance  Inter-loop test performance
-        ----------------------  -----------------------------------
+        {data_report_divider}
+        Validation performance  Inner-loop scores
+        {data_report_divider}
         {data_report}
-        ----------------------  -----------------------------------
+        {data_report_divider}
         {divider}
         Pipeline steps
         ---------------
