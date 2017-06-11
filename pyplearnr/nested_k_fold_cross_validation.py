@@ -426,13 +426,12 @@ class NestedKFoldCrossValidation(object):
         """
         Generates report string
         """
+        ############### Get validation scores for best pipeline ###############
         inner_loop_test_scores = self.pipeline.inner_loop_test_scores
-        inner_loop_train_scores = self.pipeline.inner_loop_train_scores
 
         ############### Form pipeline string ###############
         pipeline_str = '\n'.join(['{}:\n{}\n'.format(*step) \
                                   for step in self.pipeline.pipeline.steps])
-
 
         ############### Build inner/outer-fold scores matrix ###############
         score_matrix = np.zeros([self.outer_loop_fold_count,
