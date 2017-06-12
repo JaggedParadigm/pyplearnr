@@ -738,15 +738,39 @@ class NestedKFoldCrossValidation(object):
         self.box_plot(df, x_label=self.scoring_metric, number_size=number_size,
                       figsize=figsize, markersize=markersize)
 
-    def plot_contest(self, number_size=6, figsize=(10, 30), markersize=12):
+    def plot_contest(self, number_size=6, figsize=(10, 30), markersize=12,
+                     all_folds=False):
+
+        all_fold_data = {pipeline_ind: [] for pipeline_ind in self.pipelines}
+
         outer_loop_pipeline_data = {}
+
         for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
             outer_loop_pipeline_data[outer_fold_ind] = {}
 
             for pipeline_ind, pipeline in outer_fold.pipelines.iteritems():
-                outer_loop_pipeline_data[outer_fold_ind][pipeline_ind] = pipeline.inner_loop_test_scores
+                fold_test_scores = pipeline.inner_loop_test_scores
 
-            df = pd.DataFrame(outer_loop_pipeline_data[outer_fold_ind])
+                outer_loop_pipeline_data[outer_fold_ind][pipeline_ind] = \
+                    fold_test_scores
+
+                all_fold_data[pipeline_ind].extend(fold_test_scores)
+
+            if not all_folds:
+                df = pd.DataFrame(outer_loop_pipeline_data[outer_fold_ind])
+
+                medians = df.median()
+
+                medians.sort_values(ascending=True, inplace=True)
+
+                df = df[medians.index]
+
+                self.box_plot(df, x_label=self.scoring_metric,
+                              number_size=number_size, figsize=figsize,
+                              markersize=markersize)
+
+        if all_folds:
+            df = pd.DataFrame(all_fold_data)
 
             medians = df.median()
 
@@ -757,6 +781,9 @@ class NestedKFoldCrossValidation(object):
             self.box_plot(df, x_label=self.scoring_metric,
                           number_size=number_size, figsize=figsize,
                           markersize=markersize)
+
+
+
 
     def box_plot(self, df, x_label=None, number_size=25, figsize=(15, 10),
                  markersize=12):
