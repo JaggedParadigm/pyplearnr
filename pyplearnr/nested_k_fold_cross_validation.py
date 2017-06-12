@@ -424,7 +424,7 @@ class NestedKFoldCrossValidation(object):
 
         self.shuffled_data_inds = shuffled_data_inds
 
-    def get_outer_split_indices(self, X, y=None, stratified=False):
+    def get_outer_split_indices(self, X, y=None, stratified=True):
         """
         Returns test-fold indices given the feature matrix, X, optional target
         values, y, and whether the split is to be stratified, stratified.
@@ -442,7 +442,7 @@ class NestedKFoldCrossValidation(object):
                 " is True."
 
         ################ Choose K-fold cross-validation type ################
-        if not stratified:
+        if not stratified or self.scoring_metric=='rmse':
             outer_k_fold_splitter = KFold(n_splits=self.outer_loop_fold_count,
                                     random_state=self.outer_loop_split_seed)
             outer_split_kwargs = {}
@@ -736,7 +736,7 @@ class NestedKFoldCrossValidation(object):
 
         self.box_plot(df, x_label=self.scoring_metric)
 
-    def plot_contest(self):
+    def plot_contest(self, number_size=6, figsize=(10, 30)):
         outer_loop_pipeline_data = {}
         for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
             outer_loop_pipeline_data[outer_fold_ind] = {}
@@ -752,8 +752,8 @@ class NestedKFoldCrossValidation(object):
 
             df = df[medians.index]
 
-            self.box_plot(df, x_label=self.scoring_metric, number_size=6,
-                          figsize=(15,25))
+            self.box_plot(df, x_label=self.scoring_metric,
+                          number_size=number_size, figsize=figsize)
 
     def box_plot(self, df, x_label=None, number_size=25, figsize=(15, 10)):
         """
