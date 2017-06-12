@@ -8,6 +8,7 @@ import pandas as pd
 import random
 import re
 
+# For scikit-learn pipeline cloning
 from sklearn.base import clone
 
 # Graphing
@@ -17,6 +18,7 @@ import pylab as plt
 from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
 
+# Other pyplearnr classes
 from .folds import Fold, OuterFold
 
 from .trained_pipeline import OuterFoldTrainedPipeline
@@ -25,69 +27,87 @@ class NestedKFoldCrossValidation(object):
     """
     Class that handles nested k-fold cross validation, whereby the inner loop
     handles the model selection and the outer loop is used to provide an
-    estimate of the chosen model's out of sample score.
+    estimate of the chosen model/pipeline's out of sample score.
     """
     def __init__(self, outer_loop_fold_count=3, inner_loop_fold_count=3,
                  outer_loop_split_seed=None, inner_loop_split_seeds=None,
-                 shuffle_flag=True, shuffle_seed=None):
-        ############### Initialize data ###############
-        # Flag determining if initial data should be shuffled_y
+                 shuffle_seed=None, shuffle_flag=True):
+        """
+        Parameters
+        ----------
+        outer_loop_fold_count : int, optional
+            Number of folds in the outer-loop of the nested k-fold
+            cross-validation.
+
+        inner_loop_fold_count : int, optional
+            Number of folds in the inner loops of the nested k-fold
+            cross-validation for each outer-fold.
+
+        outer_loop_split_seed : int, optional
+            Seed determining how the data will be split into outer folds. This,
+            along with the other two seeds should be sufficient to reproduce
+            results.
+
+        inner_loop_split_seeds :    list of int, optional
+            Seeds determining how the training data of the outer folds will be
+            split. These, along with the other two seeds should be sufficient
+            to reproduce results.
+
+        shuffle_seed :  int, optional
+            Seed determining how the data will be shuffled if the shuffle_flag
+            is set to True. This, along with the other two seeds should be
+            sufficient to reproduce results.
+
+        shuffle_flag :  boolean, optional
+            Determines whether the data will be shuffled.
+            True :  Shuffle data and store shuffled data and the indices used
+                    to generate it using the shuffle_seed. Seed is randomly
+                    assigned if not provided.
+            False : Data is not shuffled and indices that, if used as indices
+                    for the data will result in the same data, are saved.
+
+        """
+        ############### Save initial inputs ###############
         self.shuffle_flag = shuffle_flag
 
-        # Seed determining shuffling of initial data
         self.shuffle_seed = shuffle_seed
 
-        # Total number of folds in outer and inner loops
         self.outer_loop_fold_count = outer_loop_fold_count
         self.inner_loop_fold_count = inner_loop_fold_count
 
-        # Seeds determining initial split of data into outer-folds
         self.outer_loop_split_seed = outer_loop_split_seed
 
-        # List of seeds that will be used to split the training sets of the
-        # the outer-folds into inner folds
         self.inner_loop_split_seeds = inner_loop_split_seeds
 
+        ############### Initialize other fields ###############
         # Shuffled data indices
         self.shuffled_data_inds = None
 
-        # Test/train fold indices
+        # OuterFold objects fold indices
         self.outer_folds = {}
 
         # Input data and targets
         self.X = None
         self.y = None
 
-        # Shuffled data and targets
         self.shuffled_X = None
         self.shuffled_y = None
 
-        # Pipelines
         self.pipelines = None
 
         # Best pipeline trained on all data
         self.pipeline = None
 
-        # Winning pipeline for the entire process
-        self.best_pipeline = {
-            "best_pipeline_ind": None,
-            "trained_all_pipeline": None,
-            "validation_scores": [],
-            "mean_validation_score": None,
-            "validation_score_std": None,
-            "median_validation_score": None,
-            "interquartile_range": None,
-            "confusion_matrix": None
-        }
-
+        # Essentially, uses this measure of centrality (mean or median) of the
+        # inner-fold scores to decide winning for that outer-fold
         self.score_type = None
 
+        # Metric to calculate as the pipeline scores (Ex: 'auc', 'rmse')
         self.scoring_metric = None
 
         self.best_pipeline_ind = None
 
         ############### Populate fields with defaults ###############
-        # Generate seed for initial shuffling of data if not provided
         if not self.shuffle_seed:
             self.shuffle_seed = random.randint(1,5000)
 
@@ -107,9 +127,10 @@ class NestedKFoldCrossValidation(object):
         ############### Check fields so far ###############
         outer_loop_fold_count_error = "The outer_loop_fold_count" \
             " keyword argument, dictating the number of folds in the outer " \
-            "loop, must be a positive integer"
+            "loop, must be a positive integer."
 
-        assert type(self.outer_loop_fold_count) is int, outer_loop_fold_count_error
+        assert type(self.outer_loop_fold_count) is int, \
+            outer_loop_fold_count_error
 
         assert self.outer_loop_fold_count > 0, outer_loop_fold_count_error
 
@@ -131,12 +152,82 @@ class NestedKFoldCrossValidation(object):
             " dictating how the data is split into folds for the inner"\
             " loop, must be of type np.ndarray or list" )
 
-    def fit(self, X, y, pipelines, stratified=False, scoring_metric='auc',
+    def fit(self, X, y, pipelines, stratified=True, scoring_metric='auc',
             tie_breaker='choice', best_inner_fold_pipeline_inds=None,
             best_outer_fold_pipeline=None, score_type='median'):
         """
         Perform nested k-fold cross-validation on the data using the user-
-        provided pipelines
+        provided pipelines.
+
+        This method is used in stages, depending on the output:
+        1)  Train and score the pipelines on the inner-loop folds of each
+            outer-fold. Decide the winning pipeline based on the highest mean
+            or median score. Alert the user if no winner can be chosen because
+            they have the same score. If a winner is chosen, go to step 3.
+        2)  If no winning pipeline is chosen in a particular inner-loop contest,
+            The rule dictated by the tie_breaker keyword argument will decide
+            the winner. If tie_breaker is 'choice', the user is alerted and
+            asked to run the fit method again with
+            best_inner_fold_pipeline_inds keyword argument to decide the winner
+            (preferably the simplest model).
+        3)  If a winner is chosen for each inner-loop contest for each outer-
+            loop in step 1 or the user designates one in step 2, the winning
+            pipelines of all outer-folds are collected and the ultimate winner
+            is chosen with the highest number of outer-folds it has won. If
+            no winner is chosen, the user is alerted and asked to run the fit
+            method again with the best_outer_fold_pipeline keyword argument to
+            decide the final winner (again, preferably the simplest).
+        4)  The ultimate winning pipeline is trained on the training set of the
+            outer-folds and tested on it's testing set (the validation set),
+            scored, and those values are used as an estimate of out-of-sample
+            scoring. The final pipeline is then trained on all available data
+            for use in prediction/production. A final report is output with
+            details of the entire procedure.
+
+        Parameters
+        ----------
+        X : numpy.ndarray, shape (m, n)
+            Feature input matrix. Rows are values of each column feature for a
+            given observation.
+
+        y : numpy.ndarray, shape (m, )
+            Target vector. Each entry is the output given the corresponding row
+            of feature inputs in X.
+
+        pipelines : list of sklearn.pipeline.Pipeline objects
+            The scikit-learn pipelines that will be copied and evaluated
+
+        stratified :    boolean, optional
+            Determines if the data will be stratified so that the target labels
+            in the resulting feature matrix and target vector will have the
+            same overall composition as all of the data. This is a best
+            practice for classification problems.
+            True :  Stratify the data
+            False : Don't stratify the data
+
+        scoring_metric :    str, {'auc', 'rmse', 'accuracy'}, optional
+            Metric used to score estimator.
+            auc :   Area under the receiver operating characteristic (ROC)
+                    curve.
+            accuracy :  Percent of correctly classified targets
+            rmse :  Root mean-squared error. Essentially, distance of actual
+                    from predicted target values.
+
+        tie_breaker :   str, {'choice', 'first'}, optional
+            Decision rule to use to decide the winner in the event of a tie
+            choice :    Inform the user that a tie has occured between
+                        pipelines, either in the inner-loop contest or
+                        outer-loop contest of the nested k-fold cross-
+                        validation, and that they need to include either the
+                        best_inner_fold_pipeline_inds or
+                        best_outer_fold_pipeline keyword arguments when running
+                        the fit method again to decide the winner(s).
+            first :     Simply use the first pipeline, in the order provided,
+                        with the same score.
+
+        best_inner_fold_pipeline_inds : dict, optional
+        best_outer_fold_pipeline
+        score_type
         """
         if not best_outer_fold_pipeline:
             ######## Choose best inner fold pipelines for outer folds ########
