@@ -293,7 +293,7 @@ class NestedKFoldCrossValidation(object):
                         print "\n\nNo model was chosen because there is no clear winner. " \
                               "Please use the same fit method with one of the "\
                               "indices above.\n\nExample:\tkfcv.fit(X.values, " \
-                              "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"\
+                              "y.values, pipelines)\n\t\t"\
                               "kfcv.fit(X.values, y.values, pipelines, " \
                               "best_outer_fold_pipeline=9)"
                     elif tie_breaker=='first':
@@ -632,7 +632,7 @@ class NestedKFoldCrossValidation(object):
 
         return report_str
 
-    def plot_contest(self):
+    def plot_best_pipeline_scores(self):
         # Get data
         best_pipeline_data = {}
         for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
@@ -641,18 +641,40 @@ class NestedKFoldCrossValidation(object):
 
         best_pipeline_data['val'] = self.pipeline.inner_loop_test_scores
 
-
-
-
         df = pd.DataFrame(best_pipeline_data)
 
+        self.box_plot(df, x_label=self.scoring_metric)
+
+    def plot_contest(self):
+        outer_loop_pipeline_data = {}
+        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+            outer_loop_pipeline_data[outer_fold_ind] = {}
+
+            for pipeline_ind, pipeline in outer_fold.pipelines.iteritems():
+                outer_loop_pipeline_data[outer_fold_ind][pipeline_ind] = pipeline.inner_loop_test_scores
+
+            df = pd.DataFrame(outer_loop_pipeline_data[outer_fold_ind])
+
+            medians = df.median()
+
+            medians.sort_values(ascending=True, inplace=True)
+
+            df = df[medians.index]
+
+            self.box_plot(df, x_label=self.scoring_metric, number_size=6,
+                          figsize=(15,25))
+
+    def box_plot(self, df, x_label=None, number_size=25, figsize=(15, 10)):
+        """
+        Plots all data in a dataframe as a box-and-whisker plot with optional
+        tick labels
+        """
         tick_labels = [str(column) for column in df.columns]
 
-        number_size = 25
-
+        number_size = number_size
 
         # Draw figure and axis
-        fig, ax = plt.subplots(figsize=(15, 10))
+        fig, ax = plt.subplots(figsize=figsize)
 
         # Set background to opaque
         fig.patch.set_facecolor('white')
@@ -696,7 +718,7 @@ class NestedKFoldCrossValidation(object):
         plt.setp(ax.get_xticklabels(), fontsize=number_size)
 
         # Place x- and y-labels
-        plt.xlabel(self.scoring_metric,size=number_size)
+        plt.xlabel(x_label,size=number_size)
         # plt.ylabel(y_label,size=small_text_size)
 
         # Display plot
