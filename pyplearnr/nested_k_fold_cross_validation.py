@@ -4,10 +4,14 @@
 
 # Basic tools
 import numpy as np
+import pandas as pd
 import random
 import re
 
 from sklearn.base import clone
+
+# Graphing
+import pylab as plt
 
 # Cross validation tools
 from sklearn.model_selection import KFold
@@ -289,7 +293,7 @@ class NestedKFoldCrossValidation(object):
                         print "\n\nNo model was chosen because there is no clear winner. " \
                               "Please use the same fit method with one of the "\
                               "indices above.\n\nExample:\tkfcv.fit(X.values, " \
-                              "y.values, pipelines)\n\t\tkfcv.train_winning_pipeline(3)"\
+                              "y.values, pipelines)\n\t\t"\
                               "kfcv.fit(X.values, y.values, pipelines, " \
                               "best_outer_fold_pipeline=9)"
                     elif tie_breaker=='first':
@@ -426,13 +430,12 @@ class NestedKFoldCrossValidation(object):
         """
         Generates report string
         """
+        ############### Get validation scores for best pipeline ###############
         inner_loop_test_scores = self.pipeline.inner_loop_test_scores
-        inner_loop_train_scores = self.pipeline.inner_loop_train_scores
 
         ############### Form pipeline string ###############
         pipeline_str = '\n'.join(['{}:\n{}\n'.format(*step) \
                                   for step in self.pipeline.pipeline.steps])
-
 
         ############### Build inner/outer-fold scores matrix ###############
         score_matrix = np.zeros([self.outer_loop_fold_count,
@@ -534,7 +537,9 @@ class NestedKFoldCrossValidation(object):
 
         outer_fold_ind = 0
         inner_fold_ind = 0
-        while outer_fold_ind <= outer_fold_count-1 and inner_fold_ind <= inner_fold_count-1:
+        while outer_fold_ind <= outer_fold_count-1 \
+            and inner_fold_ind <= inner_fold_count-1:
+
             row_values = ['OF%d'%(outer_fold_ind),
                           validation_scores[outer_fold_ind],
                           'IF%d'%(inner_fold_ind)]
@@ -626,3 +631,95 @@ class NestedKFoldCrossValidation(object):
         report_str = re.sub('\n        ', '\n', report_str)
 
         return report_str
+
+    def plot_best_pipeline_scores(self):
+        # Get data
+        best_pipeline_data = {}
+        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+            best_pipeline_data[outer_fold_ind] = \
+                outer_fold.pipelines[self.best_pipeline_ind].inner_loop_test_scores
+
+        best_pipeline_data['val'] = self.pipeline.inner_loop_test_scores
+
+        df = pd.DataFrame(best_pipeline_data)
+
+        self.box_plot(df, x_label=self.scoring_metric)
+
+    def plot_contest(self):
+        outer_loop_pipeline_data = {}
+        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+            outer_loop_pipeline_data[outer_fold_ind] = {}
+
+            for pipeline_ind, pipeline in outer_fold.pipelines.iteritems():
+                outer_loop_pipeline_data[outer_fold_ind][pipeline_ind] = pipeline.inner_loop_test_scores
+
+            df = pd.DataFrame(outer_loop_pipeline_data[outer_fold_ind])
+
+            medians = df.median()
+
+            medians.sort_values(ascending=True, inplace=True)
+
+            df = df[medians.index]
+
+            self.box_plot(df, x_label=self.scoring_metric, number_size=6,
+                          figsize=(15,25))
+
+    def box_plot(self, df, x_label=None, number_size=25, figsize=(15, 10)):
+        """
+        Plots all data in a dataframe as a box-and-whisker plot with optional
+        tick labels
+        """
+        tick_labels = [str(column) for column in df.columns]
+
+        number_size = number_size
+
+        # Draw figure and axis
+        fig, ax = plt.subplots(figsize=figsize)
+
+        # Set background to opaque
+        fig.patch.set_facecolor('white')
+
+        # Set grid parameters
+        ax.yaxis.grid(False)
+        ax.xaxis.grid(True, linestyle='--', which='both', color='black',
+                       alpha=0.5)
+
+        # Set left frame attributes
+        ax.spines['left'].set_linewidth(1.8)
+        ax.spines['left'].set_color('gray')
+        ax.spines['left'].set_alpha(1.0)
+
+        # Remove all but bottom frame line
+        # ax.spines['left'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+
+        # Draw box plot
+        bp = plt.boxplot(df.values, notch=0, sym='+', vert=False, whis=5,
+                         boxprops=dict(linestyle='-', linewidth=2,
+                         color='black'),
+                         medianprops=dict(linestyle='-',color='k',linewidth=2),
+                         whiskerprops=dict(color='k',linewidth=2))
+
+        # Draw overlying data points
+        for column_ind,column in enumerate(df.columns):
+            # Get data
+            y = (column_ind+1)*np.ones(len(df[column]))
+            x = df[column].values
+
+            # Plot data points
+            plt.plot(x,y,'.',color='k',markersize=12)
+
+        # Set tick labels and sizes
+        plt.setp(ax, yticklabels=tick_labels)
+        plt.setp(ax.get_yticklabels(), fontsize=number_size)
+
+        plt.setp(ax.get_xticklabels(), fontsize=number_size)
+
+        # Place x- and y-labels
+        plt.xlabel(x_label,size=number_size)
+        # plt.ylabel(y_label,size=small_text_size)
+
+        # Display plot
+        plt.show()
