@@ -68,6 +68,9 @@ class PipelineEvaluator(object):
             # Calculate the root mean square error
             score = -np.sqrt(sklearn_metrics.mean_squared_error(y, y_pred))
 
+        elif scoring_metric == 'accuracy':
+            score = sklearn_metrics.accuracy_score(y, y_pred)
+
         return score
 
     def metric_supported(self, metric):
@@ -86,7 +89,7 @@ class PipelineEvaluator(object):
             False : if the metric is not supported
 
         """
-        supported_metrics = ['auc', 'rmse']
+        supported_metrics = ['auc', 'accuracy', 'rmse']
 
         if metric:
             if metric in supported_metrics:
