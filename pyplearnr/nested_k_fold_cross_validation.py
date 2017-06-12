@@ -723,7 +723,8 @@ class NestedKFoldCrossValidation(object):
 
         return report_str
 
-    def plot_best_pipeline_scores(self):
+    def plot_best_pipeline_scores(self, number_size=18, figsize=(15, 10),
+                                  markersize=14):
         # Get data
         best_pipeline_data = {}
         for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
@@ -734,9 +735,10 @@ class NestedKFoldCrossValidation(object):
 
         df = pd.DataFrame(best_pipeline_data)
 
-        self.box_plot(df, x_label=self.scoring_metric)
+        self.box_plot(df, x_label=self.scoring_metric, number_size=number_size,
+                      figsize=figsize, markersize=markersize)
 
-    def plot_contest(self, number_size=6, figsize=(10, 30)):
+    def plot_contest(self, number_size=6, figsize=(10, 30), markersize=12):
         outer_loop_pipeline_data = {}
         for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
             outer_loop_pipeline_data[outer_fold_ind] = {}
@@ -753,9 +755,11 @@ class NestedKFoldCrossValidation(object):
             df = df[medians.index]
 
             self.box_plot(df, x_label=self.scoring_metric,
-                          number_size=number_size, figsize=figsize)
+                          number_size=number_size, figsize=figsize,
+                          markersize=markersize)
 
-    def box_plot(self, df, x_label=None, number_size=25, figsize=(15, 10)):
+    def box_plot(self, df, x_label=None, number_size=25, figsize=(15, 10),
+                 markersize=12):
         """
         Plots all data in a dataframe as a box-and-whisker plot with optional
         tick labels
@@ -800,7 +804,7 @@ class NestedKFoldCrossValidation(object):
             x = df[column].values
 
             # Plot data points
-            plt.plot(x,y,'.',color='k',markersize=12)
+            plt.plot(x,y,'.',color='k',markersize=markersize)
 
         # Set tick labels and sizes
         plt.setp(ax, yticklabels=tick_labels)
@@ -808,9 +812,28 @@ class NestedKFoldCrossValidation(object):
 
         plt.setp(ax.get_xticklabels(), fontsize=number_size)
 
+        # Adjust limits so plot elements aren't cut off
+        x_ticks, x_tick_labels = plt.xticks()
+
+        # shift half of range to left
+        range_factor = 2
+
+        x_min = x_ticks[0]
+        x_max = x_ticks[-1] + (x_ticks[-1] - x_ticks[-2])/float(range_factor)
+
+        # Set new limits
+        plt.xlim(x_min, x_max)
+
+        # Set tick positions
+        plt.xticks(x_ticks)
+
         # Place x- and y-labels
-        plt.xlabel(x_label,size=number_size)
+        plt.xlabel(x_label, size=number_size)
         # plt.ylabel(y_label,size=small_text_size)
+
+        # Move ticks to where I want them
+        ax.xaxis.set_ticks_position('none')
+        ax.yaxis.set_ticks_position('left')
 
         # Display plot
         plt.show()
