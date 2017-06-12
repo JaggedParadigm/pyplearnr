@@ -8,86 +8,113 @@ import pandas as pd
 import random
 import re
 
+# For scikit-learn pipeline cloning
 from sklearn.base import clone
 
 # Graphing
 import pylab as plt
 
+import matplotlib
+import matplotlib.pyplot as mpl_plt
+import matplotlib.colors as mpl_colors
+import matplotlib.cm as cmx
+
 # Cross validation tools
 from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
 
+# Other pyplearnr classes
 from .folds import Fold, OuterFold
 
 from .trained_pipeline import OuterFoldTrainedPipeline
+
+
 
 class NestedKFoldCrossValidation(object):
     """
     Class that handles nested k-fold cross validation, whereby the inner loop
     handles the model selection and the outer loop is used to provide an
-    estimate of the chosen model's out of sample score.
+    estimate of the chosen model/pipeline's out of sample score.
     """
     def __init__(self, outer_loop_fold_count=3, inner_loop_fold_count=3,
                  outer_loop_split_seed=None, inner_loop_split_seeds=None,
-                 shuffle_flag=True, shuffle_seed=None):
-        ############### Initialize data ###############
-        # Flag determining if initial data should be shuffled_y
+                 shuffle_seed=None, shuffle_flag=True):
+        """
+        Parameters
+        ----------
+        outer_loop_fold_count : int, optional
+            Number of folds in the outer-loop of the nested k-fold
+            cross-validation.
+
+        inner_loop_fold_count : int, optional
+            Number of folds in the inner loops of the nested k-fold
+            cross-validation for each outer-fold.
+
+        outer_loop_split_seed : int, optional
+            Seed determining how the data will be split into outer folds. This,
+            along with the other two seeds should be sufficient to reproduce
+            results.
+
+        inner_loop_split_seeds :    list of int, optional
+            Seeds determining how the training data of the outer folds will be
+            split. These, along with the other two seeds should be sufficient
+            to reproduce results.
+
+        shuffle_seed :  int, optional
+            Seed determining how the data will be shuffled if the shuffle_flag
+            is set to True. This, along with the other two seeds should be
+            sufficient to reproduce results.
+
+        shuffle_flag :  boolean, optional
+            Determines whether the data will be shuffled.
+            True :  Shuffle data and store shuffled data and the indices used
+                    to generate it using the shuffle_seed. Seed is randomly
+                    assigned if not provided.
+            False : Data is not shuffled and indices that, if used as indices
+                    for the data will result in the same data, are saved.
+
+        """
+        ############### Save initial inputs ###############
         self.shuffle_flag = shuffle_flag
 
-        # Seed determining shuffling of initial data
         self.shuffle_seed = shuffle_seed
 
-        # Total number of folds in outer and inner loops
         self.outer_loop_fold_count = outer_loop_fold_count
         self.inner_loop_fold_count = inner_loop_fold_count
 
-        # Seeds determining initial split of data into outer-folds
         self.outer_loop_split_seed = outer_loop_split_seed
 
-        # List of seeds that will be used to split the training sets of the
-        # the outer-folds into inner folds
         self.inner_loop_split_seeds = inner_loop_split_seeds
 
+        ############### Initialize other fields ###############
         # Shuffled data indices
         self.shuffled_data_inds = None
 
-        # Test/train fold indices
+        # OuterFold objects fold indices
         self.outer_folds = {}
 
         # Input data and targets
         self.X = None
         self.y = None
 
-        # Shuffled data and targets
         self.shuffled_X = None
         self.shuffled_y = None
 
-        # Pipelines
         self.pipelines = None
 
         # Best pipeline trained on all data
         self.pipeline = None
 
-        # Winning pipeline for the entire process
-        self.best_pipeline = {
-            "best_pipeline_ind": None,
-            "trained_all_pipeline": None,
-            "validation_scores": [],
-            "mean_validation_score": None,
-            "validation_score_std": None,
-            "median_validation_score": None,
-            "interquartile_range": None,
-            "confusion_matrix": None
-        }
-
+        # Essentially, uses this measure of centrality (mean or median) of the
+        # inner-fold scores to decide winning for that outer-fold
         self.score_type = None
 
+        # Metric to calculate as the pipeline scores (Ex: 'auc', 'rmse')
         self.scoring_metric = None
 
         self.best_pipeline_ind = None
 
         ############### Populate fields with defaults ###############
-        # Generate seed for initial shuffling of data if not provided
         if not self.shuffle_seed:
             self.shuffle_seed = random.randint(1,5000)
 
@@ -107,9 +134,10 @@ class NestedKFoldCrossValidation(object):
         ############### Check fields so far ###############
         outer_loop_fold_count_error = "The outer_loop_fold_count" \
             " keyword argument, dictating the number of folds in the outer " \
-            "loop, must be a positive integer"
+            "loop, must be a positive integer."
 
-        assert type(self.outer_loop_fold_count) is int, outer_loop_fold_count_error
+        assert type(self.outer_loop_fold_count) is int, \
+            outer_loop_fold_count_error
 
         assert self.outer_loop_fold_count > 0, outer_loop_fold_count_error
 
@@ -131,12 +159,82 @@ class NestedKFoldCrossValidation(object):
             " dictating how the data is split into folds for the inner"\
             " loop, must be of type np.ndarray or list" )
 
-    def fit(self, X, y, pipelines, stratified=False, scoring_metric='auc',
+    def fit(self, X, y, pipelines, stratified=True, scoring_metric='auc',
             tie_breaker='choice', best_inner_fold_pipeline_inds=None,
             best_outer_fold_pipeline=None, score_type='median'):
         """
         Perform nested k-fold cross-validation on the data using the user-
-        provided pipelines
+        provided pipelines.
+
+        This method is used in stages, depending on the output:
+        1)  Train and score the pipelines on the inner-loop folds of each
+            outer-fold. Decide the winning pipeline based on the highest mean
+            or median score. Alert the user if no winner can be chosen because
+            they have the same score. If a winner is chosen, go to step 3.
+        2)  If no winning pipeline is chosen in a particular inner-loop contest,
+            The rule dictated by the tie_breaker keyword argument will decide
+            the winner. If tie_breaker is 'choice', the user is alerted and
+            asked to run the fit method again with
+            best_inner_fold_pipeline_inds keyword argument to decide the winner
+            (preferably the simplest model).
+        3)  If a winner is chosen for each inner-loop contest for each outer-
+            loop in step 1 or the user designates one in step 2, the winning
+            pipelines of all outer-folds are collected and the ultimate winner
+            is chosen with the highest number of outer-folds it has won. If
+            no winner is chosen, the user is alerted and asked to run the fit
+            method again with the best_outer_fold_pipeline keyword argument to
+            decide the final winner (again, preferably the simplest).
+        4)  The ultimate winning pipeline is trained on the training set of the
+            outer-folds and tested on it's testing set (the validation set),
+            scored, and those values are used as an estimate of out-of-sample
+            scoring. The final pipeline is then trained on all available data
+            for use in prediction/production. A final report is output with
+            details of the entire procedure.
+
+        Parameters
+        ----------
+        X : numpy.ndarray, shape (m, n)
+            Feature input matrix. Rows are values of each column feature for a
+            given observation.
+
+        y : numpy.ndarray, shape (m, )
+            Target vector. Each entry is the output given the corresponding row
+            of feature inputs in X.
+
+        pipelines : list of sklearn.pipeline.Pipeline objects
+            The scikit-learn pipelines that will be copied and evaluated
+
+        stratified :    boolean, optional
+            Determines if the data will be stratified so that the target labels
+            in the resulting feature matrix and target vector will have the
+            same overall composition as all of the data. This is a best
+            practice for classification problems.
+            True :  Stratify the data
+            False : Don't stratify the data
+
+        scoring_metric :    str, {'auc', 'rmse', 'accuracy'}, optional
+            Metric used to score estimator.
+            auc :   Area under the receiver operating characteristic (ROC)
+                    curve.
+            accuracy :  Percent of correctly classified targets
+            rmse :  Root mean-squared error. Essentially, distance of actual
+                    from predicted target values.
+
+        tie_breaker :   str, {'choice', 'first'}, optional
+            Decision rule to use to decide the winner in the event of a tie
+            choice :    Inform the user that a tie has occured between
+                        pipelines, either in the inner-loop contest or
+                        outer-loop contest of the nested k-fold cross-
+                        validation, and that they need to include either the
+                        best_inner_fold_pipeline_inds or
+                        best_outer_fold_pipeline keyword arguments when running
+                        the fit method again to decide the winner(s).
+            first :     Simply use the first pipeline, in the order provided,
+                        with the same score.
+
+        best_inner_fold_pipeline_inds : dict, optional
+        best_outer_fold_pipeline
+        score_type
         """
         if not best_outer_fold_pipeline:
             ######## Choose best inner fold pipelines for outer folds ########
@@ -333,7 +431,7 @@ class NestedKFoldCrossValidation(object):
 
         self.shuffled_data_inds = shuffled_data_inds
 
-    def get_outer_split_indices(self, X, y=None, stratified=False):
+    def get_outer_split_indices(self, X, y=None, stratified=True):
         """
         Returns test-fold indices given the feature matrix, X, optional target
         values, y, and whether the split is to be stratified, stratified.
@@ -351,7 +449,7 @@ class NestedKFoldCrossValidation(object):
                 " is True."
 
         ################ Choose K-fold cross-validation type ################
-        if not stratified:
+        if not stratified or self.scoring_metric=='rmse':
             outer_k_fold_splitter = KFold(n_splits=self.outer_loop_fold_count,
                                     random_state=self.outer_loop_split_seed)
             outer_split_kwargs = {}
@@ -632,7 +730,8 @@ class NestedKFoldCrossValidation(object):
 
         return report_str
 
-    def plot_best_pipeline_scores(self):
+    def plot_best_pipeline_scores(self, number_size=18, figsize=(15, 10),
+                                  markersize=14):
         # Get data
         best_pipeline_data = {}
         for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
@@ -643,17 +742,147 @@ class NestedKFoldCrossValidation(object):
 
         df = pd.DataFrame(best_pipeline_data)
 
-        self.box_plot(df, x_label=self.scoring_metric)
+        self.box_plot(df, x_label=self.scoring_metric, number_size=number_size,
+                      figsize=figsize, markersize=markersize)
 
-    def plot_contest(self):
+    def get_organized_pipelines(self, step_type=None):
+        """
+        Collects pipeline indices for each option (Ex: knn, svm,
+        logistic_regression) for the desired step type (Ex: estimator).
+        Collects pipeline indices of pipelines without the desired step type
+        under a 'None' dictionary entry.
+
+        Parameters
+        ----------
+
+        """
+        organized_pipelines = {}
+
+        for pipeline_ind, pipeline in self.pipelines.iteritems():
+            step_type_found = False
+
+            for step in self.pipelines[pipeline_ind].steps:
+                if step[0] == step_type:
+                    step_type_found = True
+
+                    step_name = step[1].__class__.__name__
+
+                    if step_name not in organized_pipelines:
+                        organized_pipelines[step_name] = {
+                            'pipeline_inds': []
+                        }
+
+                    organized_pipelines[step_name]['pipeline_inds'].append(
+                                                                  pipeline_ind)
+
+            if not step_type_found:
+                if 'None' not in organized_pipelines:
+                    organized_pipelines['None'] = {
+                        'pipeline_inds': []
+                    }
+
+                organized_pipelines['None']['pipeline_inds'].append(
+                                                                  pipeline_ind)
+
+        return organized_pipelines
+
+    def get_step_colors(self, df, color_by=None, color_map='viridis'):
+        """
+        """
+        ######### Collect pipeline indices with desired attribute  #########
+        step_colors = self.get_organized_pipelines(step_type=color_by)
+
+        ############### Build working/indexible colormap ###############
+        color_count = len(step_colors.keys())-1
+
+        cmap = mpl_plt.get_cmap(color_map)
+
+        cNorm = mpl_colors.Normalize(vmin=0, vmax=color_count-1)
+
+        scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cmap)
+
+        # Set internal colors
+        color_ind = 0
+        for step_name, step in step_colors.iteritems():
+            if step_name == 'None':
+                step['color'] = 'k'
+            else:
+                step['color'] = scalarMap.to_rgba(color_ind)
+
+                color_ind += 1
+
+        return step_colors
+
+    def get_colors(self, df, color_by=None, color_map='viridis'):
+        """
+        """
+        # Get choose colors for each step option and collect corresponding
+        # pipeline indices
+        step_colors = self.get_step_colors(df, color_by=color_by, color_map=color_map)
+
+        # Build colors list
+        colors = []
+        for pipeline_ind in df.columns:
+            ind_found = False
+
+            for step_name, step in step_colors.iteritems():
+                if pipeline_ind in step['pipeline_inds']:
+                    colors.append(step['color'])
+
+                    ind_found = True
+
+            if not ind_found:
+                colors.append(step_colors['None']['color'])
+
+        return colors
+
+    def plot_contest(self, number_size=6, figsize=(10, 30), markersize=12,
+                     all_folds=False, color_by=None, color_map='viridis'):
+
+        colors = None
+        
+        custom_legend = None
+
+        all_fold_data = {pipeline_ind: [] for pipeline_ind in self.pipelines}
+
         outer_loop_pipeline_data = {}
+
         for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
             outer_loop_pipeline_data[outer_fold_ind] = {}
 
             for pipeline_ind, pipeline in outer_fold.pipelines.iteritems():
-                outer_loop_pipeline_data[outer_fold_ind][pipeline_ind] = pipeline.inner_loop_test_scores
+                fold_test_scores = pipeline.inner_loop_test_scores
 
-            df = pd.DataFrame(outer_loop_pipeline_data[outer_fold_ind])
+                outer_loop_pipeline_data[outer_fold_ind][pipeline_ind] = \
+                    fold_test_scores
+
+                all_fold_data[pipeline_ind].extend(fold_test_scores)
+
+            if not all_folds:
+                df = pd.DataFrame(outer_loop_pipeline_data[outer_fold_ind])
+
+                medians = df.median()
+
+                medians.sort_values(ascending=True, inplace=True)
+
+                df = df[medians.index]
+
+                if color_by:
+                    colors = self.get_colors(df, color_by=color_by,
+                                             color_map=color_map)
+
+                    custom_legend = self.get_custom_legend(cdf,
+                                                           color_by=color_by,
+                                                           color_map=color_map)
+
+
+                self.box_plot(df, x_label=self.scoring_metric,
+                              number_size=number_size, figsize=figsize,
+                              markersize=markersize, colors=colors,
+                              custom_legend=custom_legend)
+
+        if all_folds:
+            df = pd.DataFrame(all_fold_data)
 
             medians = df.median()
 
@@ -661,10 +890,40 @@ class NestedKFoldCrossValidation(object):
 
             df = df[medians.index]
 
-            self.box_plot(df, x_label=self.scoring_metric, number_size=6,
-                          figsize=(15,25))
+            if color_by:
+                colors = self.get_colors(df, color_by=color_by,
+                                         color_map=color_map)
 
-    def box_plot(self, df, x_label=None, number_size=25, figsize=(15, 10)):
+                custom_legend = self.get_custom_legend(df,
+                                                       color_by=color_by,
+                                                       color_map=color_map)
+
+            self.box_plot(df, x_label=self.scoring_metric,
+                          number_size=number_size, figsize=figsize,
+                          markersize=markersize, colors=colors,
+                          custom_legend=custom_legend)
+
+    def get_custom_legend(self, df, color_by=None, color_map='viridis'):
+        """
+        """
+        step_colors = self.get_step_colors(df, color_by=color_by,
+                                           color_map=color_map)
+
+        labels = step_colors.keys()
+
+        descriptions = labels
+
+        proxies = [self.create_proxy(step_colors[item]['color']) for item in labels]
+
+        return (labels, proxies)
+
+    def create_proxy(self, color):
+        line = plt.Rectangle((0,0), 1, 1, color=color)
+
+        return line
+
+    def box_plot(self, df, x_label=None, number_size=25, figsize=(15, 10),
+                 markersize=12, colors=None, custom_legend=None):
         """
         Plots all data in a dataframe as a box-and-whisker plot with optional
         tick labels
@@ -702,6 +961,12 @@ class NestedKFoldCrossValidation(object):
                          medianprops=dict(linestyle='-',color='k',linewidth=2),
                          whiskerprops=dict(color='k',linewidth=2))
 
+        # Set custom colors
+        if colors:
+            for item in ['boxes', 'medians']: #'whiskers', 'fliers', 'caps'
+                for patch, color in zip(bp[item],colors):
+                    patch.set_color(color)
+
         # Draw overlying data points
         for column_ind,column in enumerate(df.columns):
             # Get data
@@ -709,7 +974,7 @@ class NestedKFoldCrossValidation(object):
             x = df[column].values
 
             # Plot data points
-            plt.plot(x,y,'.',color='k',markersize=12)
+            plt.plot(x,y,'.',color='k',markersize=markersize)
 
         # Set tick labels and sizes
         plt.setp(ax, yticklabels=tick_labels)
@@ -717,9 +982,40 @@ class NestedKFoldCrossValidation(object):
 
         plt.setp(ax.get_xticklabels(), fontsize=number_size)
 
+        # Adjust limits so plot elements aren't cut off
+        x_ticks, x_tick_labels = plt.xticks()
+
+        # shift half of range to left
+        range_factor = 2
+
+        x_min = x_ticks[0]
+        x_max = x_ticks[-1] + (x_ticks[-1] - x_ticks[-2])/float(range_factor)
+
+        # Set new limits
+        plt.xlim(x_min, x_max)
+
+        # Set tick positions
+        plt.xticks(x_ticks)
+
         # Place x- and y-labels
-        plt.xlabel(x_label,size=number_size)
+        plt.xlabel(x_label, size=number_size)
         # plt.ylabel(y_label,size=small_text_size)
+
+        # Move ticks to where I want them
+        ax.xaxis.set_ticks_position('none')
+        ax.yaxis.set_ticks_position('left')
+
+        if custom_legend:
+            legend_marker_size = 0.85
+            ax.legend(custom_legend[1], custom_legend[0],
+                      handlelength=legend_marker_size,
+                      handleheight=legend_marker_size,
+                      frameon=False, loc='best') #, numpoints=1, markerscale=1
+
+            plt.setp(plt.gca().get_legend().get_texts(), fontsize='10')
+
+
+
 
         # Display plot
         plt.show()
