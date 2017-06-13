@@ -159,6 +159,10 @@ class NestedKFoldCrossValidation(object):
             " dictating how the data is split into folds for the inner"\
             " loop, must be of type np.ndarray or list" )
 
+        assert len(self.inner_loop_split_seeds) == self.outer_loop_fold_count, \
+            "The number of inner-loop contest seeds must be equal to the " \
+            "number of outer-folds"
+
     def fit(self, X, y, pipelines, stratified=True, scoring_metric='auc',
             tie_breaker='choice', best_inner_fold_pipeline_inds=None,
             best_outer_fold_pipeline=None, score_type='median'):
@@ -730,8 +734,9 @@ class NestedKFoldCrossValidation(object):
 
         return report_str
 
-    def plot_best_pipeline_scores(self, number_size=18, figsize=(15, 10),
-                                  markersize=14):
+    def plot_best_pipeline_scores(self, number_size=10, figsize=(9, 3),
+                                  markersize=8, draw_points=False,
+                                  box_line_thickness=1):
         # Get data
         best_pipeline_data = {}
         for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
@@ -743,7 +748,231 @@ class NestedKFoldCrossValidation(object):
         df = pd.DataFrame(best_pipeline_data)
 
         self.box_plot(df, x_label=self.scoring_metric, number_size=number_size,
-                      figsize=figsize, markersize=markersize)
+                      figsize=figsize, markersize=markersize,
+                      draw_points=draw_points,
+                      box_line_thickness=box_line_thickness)
+
+    def plot_contest(self, number_size=6, figsize=(10, 30), markersize=2,
+                     all_folds=False, color_by=None, color_map='viridis',
+                     legend_loc='best', legend_font_size='10',
+                     legend_marker_size=0.85, box_line_thickness=0.5,
+                     draw_points=False):
+
+        colors = None
+
+        custom_legend = None
+
+        all_fold_data = {pipeline_ind: [] for pipeline_ind in self.pipelines}
+
+        outer_loop_pipeline_data = {}
+
+        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+            outer_loop_pipeline_data[outer_fold_ind] = {}
+
+            for pipeline_ind, pipeline in outer_fold.pipelines.iteritems():
+                fold_test_scores = pipeline.inner_loop_test_scores
+
+                outer_loop_pipeline_data[outer_fold_ind][pipeline_ind] = \
+                    fold_test_scores
+
+                all_fold_data[pipeline_ind].extend(fold_test_scores)
+
+            if not all_folds:
+                df = pd.DataFrame(outer_loop_pipeline_data[outer_fold_ind])
+
+                medians = df.median()
+
+                medians.sort_values(ascending=True, inplace=True)
+
+                df = df[medians.index]
+
+                if color_by:
+                    colors = self.get_colors(df, color_by=color_by,
+                                             color_map=color_map)
+
+                    custom_legend = self.get_custom_legend(df,
+                                                           color_by=color_by,
+                                                           color_map=color_map)
+
+
+                self.box_plot(df, x_label=self.scoring_metric,
+                              number_size=number_size, figsize=figsize,
+                              markersize=markersize, colors=colors,
+                              custom_legend=custom_legend,
+                              legend_loc=legend_loc,
+                              legend_font_size=legend_font_size,
+                              legend_marker_size=legend_marker_size,
+                              box_line_thickness=box_line_thickness,
+                              draw_points=draw_points)
+
+        if all_folds:
+            df = pd.DataFrame(all_fold_data)
+
+            medians = df.median()
+
+            medians.sort_values(ascending=True, inplace=True)
+
+            df = df[medians.index]
+
+            if color_by:
+                colors = self.get_colors(df, color_by=color_by,
+                                         color_map=color_map)
+
+                custom_legend = self.get_custom_legend(df,
+                                                       color_by=color_by,
+                                                       color_map=color_map)
+
+            self.box_plot(df, x_label=self.scoring_metric,
+                          number_size=number_size, figsize=figsize,
+                          markersize=markersize, colors=colors,
+                          custom_legend=custom_legend, legend_loc=legend_loc,
+                          legend_font_size=legend_font_size,
+                          legend_marker_size=legend_marker_size,
+                          box_line_thickness=box_line_thickness,
+                          draw_points=draw_points)
+
+    def box_plot(self, df, x_label=None, number_size=25, figsize=(15, 10),
+                 markersize=12, colors=None, custom_legend=None,
+                 legend_loc='best', legend_font_size='10',
+                 legend_marker_size=0.85, box_line_thickness=1.75,
+                 draw_points=False):
+        """
+        Plots all data in a dataframe as a box-and-whisker plot with optional
+        axis label
+        """
+        tick_labels = [str(column) for column in df.columns]
+
+        number_size = number_size
+
+        # Draw figure and axis
+        fig, ax = plt.subplots(figsize=figsize)
+
+        # Set background to opaque
+        fig.patch.set_facecolor('white')
+
+        # Set grid parameters
+        ax.yaxis.grid(False)
+        ax.xaxis.grid(True, linestyle='--', which='both', color='black',
+                       alpha=0.5)
+
+        # Set left frame attributes
+        ax.spines['left'].set_linewidth(1.8)
+        ax.spines['left'].set_color('gray')
+        ax.spines['left'].set_alpha(1.0)
+
+        # Remove all but bottom frame line
+        # ax.spines['left'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+
+        # Draw box plot
+        box_plot_kwargs = dict(
+            notch=0,
+            sym='+',
+            vert=False,
+            whis=5,
+            patch_artist=True,
+            capprops=dict(
+                color='k',
+                linestyle='-',
+                linewidth=box_line_thickness
+            ),
+            boxprops=dict(
+                linestyle='-',
+                linewidth=box_line_thickness,
+                color='black'
+            ),
+            medianprops=dict(
+                linestyle='none',
+                color='k',
+                linewidth=box_line_thickness
+            ),
+            whiskerprops=dict(
+                color='k',
+                linestyle='-',
+                linewidth=box_line_thickness
+            )
+
+        )
+
+        bp = plt.boxplot(df.values,**box_plot_kwargs)
+
+        # Set custom colors
+        if colors:
+            for item in ['boxes']: #'medians' 'whiskers', 'fliers', 'caps'
+                for patch, color in zip(bp[item],colors):
+                    patch.set_color(color)
+
+            for patch, color in zip(bp['medians'],colors):
+                patch.set_color('black')
+        else:
+            for patch in bp['boxes']:
+                patch.set_color('black')
+
+            for patch in bp['medians']:
+                patch.set_color('black')
+
+        # Draw overlying data points
+        if draw_points == True:
+            for column_ind,column in enumerate(df.columns):
+                # Get data
+                y = (column_ind+1)*np.ones(len(df[column]))
+                x = df[column].values
+
+                # Plot data points
+                plt.plot(x,y,'.',color='k',markersize=markersize)
+
+        # Draw a white dot for medians
+        for column_ind,column in enumerate(df.columns):
+            x_median = np.median(df[column].values)
+            y_median = (column_ind+1)*np.ones(1)
+
+            # Plot data points
+            plt.plot(x_median,y_median,'o',color='white',markersize=markersize,
+                     markeredgecolor='white')
+
+
+        # Set tick labels and sizes
+        plt.setp(ax, yticklabels=tick_labels)
+        plt.setp(ax.get_yticklabels(), fontsize=number_size)
+
+        plt.setp(ax.get_xticklabels(), fontsize=number_size)
+
+        # Adjust limits so plot elements aren't cut off
+        x_ticks, x_tick_labels = plt.xticks()
+
+        # shift half of range to left
+        range_factor = 2
+
+        x_min = x_ticks[0]
+        x_max = x_ticks[-1] + (x_ticks[-1] - x_ticks[-2])/float(range_factor)
+
+        # Set new limits
+        plt.xlim(x_min, x_max)
+
+        # Set tick positions
+        plt.xticks(x_ticks)
+
+        # Place x- and y-labels
+        plt.xlabel(x_label, size=number_size)
+        # plt.ylabel(y_label,size=small_text_size)
+
+        # Move ticks to where I want them
+        ax.xaxis.set_ticks_position('none')
+        ax.yaxis.set_ticks_position('left')
+
+        if custom_legend:
+            ax.legend(custom_legend[1], custom_legend[0],
+                      handlelength=legend_marker_size,
+                      handleheight=legend_marker_size,
+                      frameon=False, loc=legend_loc)
+
+            plt.setp(plt.gca().get_legend().get_texts(),
+                     fontsize=legend_font_size)
+
+        # Display plot
+        plt.show()
 
     def get_organized_pipelines(self, step_type=None):
         """
@@ -836,82 +1065,6 @@ class NestedKFoldCrossValidation(object):
 
         return colors
 
-    def plot_contest(self, number_size=6, figsize=(10, 30), markersize=12,
-                     all_folds=False, color_by=None, color_map='viridis',
-                     legend_loc='best', legend_font_size='10',
-                     legend_marker_size=0.85, box_line_thickness=1.75):
-
-        colors = None
-
-        custom_legend = None
-
-        all_fold_data = {pipeline_ind: [] for pipeline_ind in self.pipelines}
-
-        outer_loop_pipeline_data = {}
-
-        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
-            outer_loop_pipeline_data[outer_fold_ind] = {}
-
-            for pipeline_ind, pipeline in outer_fold.pipelines.iteritems():
-                fold_test_scores = pipeline.inner_loop_test_scores
-
-                outer_loop_pipeline_data[outer_fold_ind][pipeline_ind] = \
-                    fold_test_scores
-
-                all_fold_data[pipeline_ind].extend(fold_test_scores)
-
-            if not all_folds:
-                df = pd.DataFrame(outer_loop_pipeline_data[outer_fold_ind])
-
-                medians = df.median()
-
-                medians.sort_values(ascending=True, inplace=True)
-
-                df = df[medians.index]
-
-                if color_by:
-                    colors = self.get_colors(df, color_by=color_by,
-                                             color_map=color_map)
-
-                    custom_legend = self.get_custom_legend(cdf,
-                                                           color_by=color_by,
-                                                           color_map=color_map)
-
-
-                self.box_plot(df, x_label=self.scoring_metric,
-                              number_size=number_size, figsize=figsize,
-                              markersize=markersize, colors=colors,
-                              custom_legend=custom_legend,
-                              legend_loc=legend_loc,
-                              legend_font_size=legend_font_size,
-                              legend_marker_size=legend_marker_size,
-                              box_line_thickness=box_line_thickness)
-
-        if all_folds:
-            df = pd.DataFrame(all_fold_data)
-
-            medians = df.median()
-
-            medians.sort_values(ascending=True, inplace=True)
-
-            df = df[medians.index]
-
-            if color_by:
-                colors = self.get_colors(df, color_by=color_by,
-                                         color_map=color_map)
-
-                custom_legend = self.get_custom_legend(df,
-                                                       color_by=color_by,
-                                                       color_map=color_map)
-
-            self.box_plot(df, x_label=self.scoring_metric,
-                          number_size=number_size, figsize=figsize,
-                          markersize=markersize, colors=colors,
-                          custom_legend=custom_legend, legend_loc=legend_loc,
-                          legend_font_size=legend_font_size,
-                          legend_marker_size=legend_marker_size,
-                          box_line_thickness=box_line_thickness)
-
     def get_custom_legend(self, df, color_by=None, color_map='viridis'):
         step_colors = self.get_step_colors(df, color_by=color_by,
                                            color_map=color_map)
@@ -929,106 +1082,3 @@ class NestedKFoldCrossValidation(object):
         rect = plt.Rectangle((0,0), 1, 1, color=color)
 
         return rect
-
-    def box_plot(self, df, x_label=None, number_size=25, figsize=(15, 10),
-                 markersize=12, colors=None, custom_legend=None,
-                 legend_loc='best', legend_font_size='10',
-                 legend_marker_size=0.85, box_line_thickness=1.75):
-        """
-        Plots all data in a dataframe as a box-and-whisker plot with optional
-        axis label
-        """
-        tick_labels = [str(column) for column in df.columns]
-
-        number_size = number_size
-
-        # Draw figure and axis
-        fig, ax = plt.subplots(figsize=figsize)
-
-        # Set background to opaque
-        fig.patch.set_facecolor('white')
-
-        # Set grid parameters
-        ax.yaxis.grid(False)
-        ax.xaxis.grid(True, linestyle='--', which='both', color='black',
-                       alpha=0.5)
-
-        # Set left frame attributes
-        ax.spines['left'].set_linewidth(1.8)
-        ax.spines['left'].set_color('gray')
-        ax.spines['left'].set_alpha(1.0)
-
-        # Remove all but bottom frame line
-        # ax.spines['left'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.spines['bottom'].set_visible(False)
-
-        # Draw box plot
-        bp = plt.boxplot(df.values, notch=0, sym='+', vert=False, whis=5,
-                         boxprops=dict(linestyle='-',
-                                       linewidth=box_line_thickness,
-                                       color='black'),
-                         medianprops=dict(linestyle='-',color='k',
-                                          linewidth=box_line_thickness),
-                         whiskerprops=dict(color='k',
-                                           linewidth=box_line_thickness))
-
-        # Set custom colors
-        if colors:
-            for item in ['boxes']: #'medians' 'whiskers', 'fliers', 'caps'
-                for patch, color in zip(bp[item],colors):
-                    patch.set_color(color)
-
-            for patch, color in zip(bp['medians'],colors):
-                patch.set_color('black')
-
-        # Draw overlying data points
-        for column_ind,column in enumerate(df.columns):
-            # Get data
-            y = (column_ind+1)*np.ones(len(df[column]))
-            x = df[column].values
-
-            # Plot data points
-            plt.plot(x,y,'.',color='k',markersize=markersize)
-
-        # Set tick labels and sizes
-        plt.setp(ax, yticklabels=tick_labels)
-        plt.setp(ax.get_yticklabels(), fontsize=number_size)
-
-        plt.setp(ax.get_xticklabels(), fontsize=number_size)
-
-        # Adjust limits so plot elements aren't cut off
-        x_ticks, x_tick_labels = plt.xticks()
-
-        # shift half of range to left
-        range_factor = 2
-
-        x_min = x_ticks[0]
-        x_max = x_ticks[-1] + (x_ticks[-1] - x_ticks[-2])/float(range_factor)
-
-        # Set new limits
-        plt.xlim(x_min, x_max)
-
-        # Set tick positions
-        plt.xticks(x_ticks)
-
-        # Place x- and y-labels
-        plt.xlabel(x_label, size=number_size)
-        # plt.ylabel(y_label,size=small_text_size)
-
-        # Move ticks to where I want them
-        ax.xaxis.set_ticks_position('none')
-        ax.yaxis.set_ticks_position('left')
-
-        if custom_legend:
-            ax.legend(custom_legend[1], custom_legend[0],
-                      handlelength=legend_marker_size,
-                      handleheight=legend_marker_size,
-                      frameon=False, loc=legend_loc)
-
-            plt.setp(plt.gca().get_legend().get_texts(),
-                     fontsize=legend_font_size)
-
-        # Display plot
-        plt.show()
