@@ -837,10 +837,12 @@ class NestedKFoldCrossValidation(object):
         return colors
 
     def plot_contest(self, number_size=6, figsize=(10, 30), markersize=12,
-                     all_folds=False, color_by=None, color_map='viridis'):
+                     all_folds=False, color_by=None, color_map='viridis',
+                     legend_loc='best', legend_font_size='10',
+                     legend_marker_size=0.85, box_line_thickness=1.75):
 
         colors = None
-        
+
         custom_legend = None
 
         all_fold_data = {pipeline_ind: [] for pipeline_ind in self.pipelines}
@@ -879,7 +881,11 @@ class NestedKFoldCrossValidation(object):
                 self.box_plot(df, x_label=self.scoring_metric,
                               number_size=number_size, figsize=figsize,
                               markersize=markersize, colors=colors,
-                              custom_legend=custom_legend)
+                              custom_legend=custom_legend,
+                              legend_loc=legend_loc,
+                              legend_font_size=legend_font_size,
+                              legend_marker_size=legend_marker_size,
+                              box_line_thickness=box_line_thickness)
 
         if all_folds:
             df = pd.DataFrame(all_fold_data)
@@ -901,11 +907,12 @@ class NestedKFoldCrossValidation(object):
             self.box_plot(df, x_label=self.scoring_metric,
                           number_size=number_size, figsize=figsize,
                           markersize=markersize, colors=colors,
-                          custom_legend=custom_legend)
+                          custom_legend=custom_legend, legend_loc=legend_loc,
+                          legend_font_size=legend_font_size,
+                          legend_marker_size=legend_marker_size,
+                          box_line_thickness=box_line_thickness)
 
     def get_custom_legend(self, df, color_by=None, color_map='viridis'):
-        """
-        """
         step_colors = self.get_step_colors(df, color_by=color_by,
                                            color_map=color_map)
 
@@ -913,20 +920,23 @@ class NestedKFoldCrossValidation(object):
 
         descriptions = labels
 
-        proxies = [self.create_proxy(step_colors[item]['color']) for item in labels]
+        proxies = [self.create_proxy(step_colors[item]['color']) \
+                   for item in labels]
 
         return (labels, proxies)
 
     def create_proxy(self, color):
-        line = plt.Rectangle((0,0), 1, 1, color=color)
+        rect = plt.Rectangle((0,0), 1, 1, color=color)
 
-        return line
+        return rect
 
     def box_plot(self, df, x_label=None, number_size=25, figsize=(15, 10),
-                 markersize=12, colors=None, custom_legend=None):
+                 markersize=12, colors=None, custom_legend=None,
+                 legend_loc='best', legend_font_size='10',
+                 legend_marker_size=0.85, box_line_thickness=1.75):
         """
         Plots all data in a dataframe as a box-and-whisker plot with optional
-        tick labels
+        axis label
         """
         tick_labels = [str(column) for column in df.columns]
 
@@ -956,16 +966,22 @@ class NestedKFoldCrossValidation(object):
 
         # Draw box plot
         bp = plt.boxplot(df.values, notch=0, sym='+', vert=False, whis=5,
-                         boxprops=dict(linestyle='-', linewidth=2,
-                         color='black'),
-                         medianprops=dict(linestyle='-',color='k',linewidth=2),
-                         whiskerprops=dict(color='k',linewidth=2))
+                         boxprops=dict(linestyle='-',
+                                       linewidth=box_line_thickness,
+                                       color='black'),
+                         medianprops=dict(linestyle='-',color='k',
+                                          linewidth=box_line_thickness),
+                         whiskerprops=dict(color='k',
+                                           linewidth=box_line_thickness))
 
         # Set custom colors
         if colors:
-            for item in ['boxes', 'medians']: #'whiskers', 'fliers', 'caps'
+            for item in ['boxes']: #'medians' 'whiskers', 'fliers', 'caps'
                 for patch, color in zip(bp[item],colors):
                     patch.set_color(color)
+
+            for patch, color in zip(bp['medians'],colors):
+                patch.set_color('black')
 
         # Draw overlying data points
         for column_ind,column in enumerate(df.columns):
@@ -1006,16 +1022,13 @@ class NestedKFoldCrossValidation(object):
         ax.yaxis.set_ticks_position('left')
 
         if custom_legend:
-            legend_marker_size = 0.85
             ax.legend(custom_legend[1], custom_legend[0],
                       handlelength=legend_marker_size,
                       handleheight=legend_marker_size,
-                      frameon=False, loc='best') #, numpoints=1, markerscale=1
+                      frameon=False, loc=legend_loc)
 
-            plt.setp(plt.gca().get_legend().get_texts(), fontsize='10')
-
-
-
+            plt.setp(plt.gca().get_legend().get_texts(),
+                     fontsize=legend_font_size)
 
         # Display plot
         plt.show()
