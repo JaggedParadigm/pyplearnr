@@ -758,23 +758,26 @@ class NestedKFoldCrossValidation(object):
 
         custom_legend = None
 
-        all_fold_data = {pipeline_ind: [] for pipeline_ind in self.pipelines}
-
-        outer_loop_pipeline_data = {}
+        # Collect pipeline data for each outer-fold contest
+        pipeline_data = {pipeline_ind: {} for pipeline_ind in self.pipelines}
 
         for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
-            outer_loop_pipeline_data[outer_fold_ind] = {}
-
             for pipeline_ind, pipeline in outer_fold.pipelines.iteritems():
-                fold_test_scores = pipeline.inner_loop_test_scores
+                pipeline_data[pipeline_ind][outer_fold_ind] = \
+                    outer_fold.pipelines[pipeline_ind].inner_loop_test_scores
 
-                outer_loop_pipeline_data[outer_fold_ind][pipeline_ind] = \
-                    fold_test_scores
+        # Plot
+        if not all_folds:
+            # Do a separate box-and-whisker plot for each outer fold contest
+            for outer_fold_ind in self.outer_folds:
+                # Collect data for all pipelines corresponding to the current
+                # outer-fold
+                current_fold_data = {}
+                for pipeline_ind in self.pipelines:
+                    current_fold_data[pipeline_ind] = \
+                        pipeline_data[pipeline_ind][outer_fold_ind]
 
-                all_fold_data[pipeline_ind].extend(fold_test_scores)
-
-            if not all_folds:
-                df = pd.DataFrame(outer_loop_pipeline_data[outer_fold_ind])
+                df = pd.DataFrame(current_fold_data)
 
                 medians = df.median()
 
@@ -783,14 +786,14 @@ class NestedKFoldCrossValidation(object):
                 df = df[medians.index]
 
                 if color_by:
-                    colors = self.get_colors(df, color_by=color_by,
-                                             color_map=color_map,
-                                             highlight_best=highlight_best)
+                    colors = self.get_colors(
+                                df, color_by=color_by, color_map=color_map,
+                                highlight_best=highlight_best)
 
-                    custom_legend = self.get_custom_legend(df,
-                                                           color_by=color_by,
-                                                           color_map=color_map)
-
+                    custom_legend = self.get_custom_legend(
+                                        df,
+                                        color_by=color_by,
+                                        color_map=color_map)
 
                 self.box_plot(df, x_label=self.scoring_metric,
                               fontsize=fontsize, figsize=figsize,
@@ -802,7 +805,17 @@ class NestedKFoldCrossValidation(object):
                               box_line_thickness=box_line_thickness,
                               draw_points=draw_points)
 
-        if all_folds:
+        else:
+            # Combine all data for each pipeline and graph all together
+            all_fold_data = {}
+            for pipeline_ind, outer_fold_pipeline_data in pipeline_data.iteritems():
+                if pipeline_ind not in all_fold_data:
+                    all_fold_data[pipeline_ind] = []
+
+                for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+                    all_fold_data[pipeline_ind].extend(
+                        pipeline_data[pipeline_ind][outer_fold_ind])
+
             df = pd.DataFrame(all_fold_data)
 
             medians = df.median()
@@ -985,15 +998,27 @@ class NestedKFoldCrossValidation(object):
         """
         organized_pipelines = {}
 
+        if '__' not in step_type:
+            pass
+        else:
+            step_type, step_option, step_parameter = step_type.split('__')
+            print step_type, step_option, step_parameter
+
+        raise Exception()
+
         for pipeline_ind, pipeline in self.pipelines.iteritems():
             step_type_found = False
 
+            # Does this pipeline have this step?
             for step in self.pipelines[pipeline_ind].steps:
                 if step[0] == step_type:
                     step_type_found = True
 
+                    
                     step_name = step[1].__class__.__name__
 
+                    # Initialize the pipeline indices for this step name if not
+                    # found
                     if step_name not in organized_pipelines:
                         organized_pipelines[step_name] = {
                             'pipeline_inds': []
@@ -1002,6 +1027,7 @@ class NestedKFoldCrossValidation(object):
                     organized_pipelines[step_name]['pipeline_inds'].append(
                                                                   pipeline_ind)
 
+            # Lump pipeline in with default if step not found
             if not step_type_found:
                 if 'None' not in organized_pipelines:
                     organized_pipelines['None'] = {
@@ -1020,7 +1046,7 @@ class NestedKFoldCrossValidation(object):
         step_colors = self.get_organized_pipelines(step_type=color_by)
 
         ############### Build working/indexible colormap ###############
-        color_count = len(step_colors.keys())-1
+        color_count = len(step_colors.keys())
 
         cmap = mpl_plt.get_cmap(color_map)
 
@@ -1044,9 +1070,10 @@ class NestedKFoldCrossValidation(object):
                    highlight_best=None):
         """
         """
-        # Get choose colors for each step option and collect corresponding
+        # Choose colors for each step option and collect corresponding
         # pipeline indices
-        step_colors = self.get_step_colors(df, color_by=color_by, color_map=color_map)
+        step_colors = self.get_step_colors(df, color_by=color_by,
+                                           color_map=color_map)
 
         # Build colors list
         colors = []
