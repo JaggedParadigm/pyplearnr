@@ -559,9 +559,7 @@ class NestedKFoldCrossValidation(object):
                 score_matrix[outer_fold_ind, inner_fold_ind] = score
 
         # Form headers for validation section
-        short_headers = ['0%', '25%', '50%', '75%', '100%', 'mean', 'std']
-
-        quartile_headers = ['0%', '25%', '50%', '75%', '100%']
+        quartile_headers = ['min', '25%', '50%', '75%', 'max']
         mean_based_headers = ['mean', 'std']
         outer_fold_headers = ['%d'%(outer_fold_ind) \
                               for outer_fold_ind in outer_fold_inds]
@@ -612,9 +610,7 @@ class NestedKFoldCrossValidation(object):
                 row_values.append(outer_fold_quartile_score)
             data_report.append(data_row_str.format(*row_values))
 
-
         data_report.append(data_report_divider)
-
 
         # Start mean data rows
         row_values = ['mean', validation_mean, 'mean']
@@ -734,7 +730,7 @@ class NestedKFoldCrossValidation(object):
 
         return report_str
 
-    def plot_best_pipeline_scores(self, number_size=10, figsize=(9, 3),
+    def plot_best_pipeline_scores(self, fontsize=10, figsize=(9, 3),
                                   markersize=8, draw_points=False,
                                   box_line_thickness=1):
         # Get data
@@ -747,16 +743,16 @@ class NestedKFoldCrossValidation(object):
 
         df = pd.DataFrame(best_pipeline_data)
 
-        self.box_plot(df, x_label=self.scoring_metric, number_size=number_size,
+        self.box_plot(df, x_label=self.scoring_metric, fontsize=fontsize,
                       figsize=figsize, markersize=markersize,
                       draw_points=draw_points,
                       box_line_thickness=box_line_thickness)
 
-    def plot_contest(self, number_size=6, figsize=(10, 30), markersize=2,
+    def plot_contest(self, fontsize=6, figsize=(10, 30), markersize=2,
                      all_folds=False, color_by=None, color_map='viridis',
                      legend_loc='best', legend_font_size='10',
                      legend_marker_size=0.85, box_line_thickness=0.5,
-                     draw_points=False):
+                     draw_points=False, highlight_best=False):
 
         colors = None
 
@@ -788,7 +784,8 @@ class NestedKFoldCrossValidation(object):
 
                 if color_by:
                     colors = self.get_colors(df, color_by=color_by,
-                                             color_map=color_map)
+                                             color_map=color_map,
+                                             highlight_best=highlight_best)
 
                     custom_legend = self.get_custom_legend(df,
                                                            color_by=color_by,
@@ -796,7 +793,7 @@ class NestedKFoldCrossValidation(object):
 
 
                 self.box_plot(df, x_label=self.scoring_metric,
-                              number_size=number_size, figsize=figsize,
+                              fontsize=fontsize, figsize=figsize,
                               markersize=markersize, colors=colors,
                               custom_legend=custom_legend,
                               legend_loc=legend_loc,
@@ -816,14 +813,15 @@ class NestedKFoldCrossValidation(object):
 
             if color_by:
                 colors = self.get_colors(df, color_by=color_by,
-                                         color_map=color_map)
+                                         color_map=color_map,
+                                         highlight_best=highlight_best)
 
                 custom_legend = self.get_custom_legend(df,
                                                        color_by=color_by,
                                                        color_map=color_map)
 
             self.box_plot(df, x_label=self.scoring_metric,
-                          number_size=number_size, figsize=figsize,
+                          fontsize=fontsize, figsize=figsize,
                           markersize=markersize, colors=colors,
                           custom_legend=custom_legend, legend_loc=legend_loc,
                           legend_font_size=legend_font_size,
@@ -831,7 +829,7 @@ class NestedKFoldCrossValidation(object):
                           box_line_thickness=box_line_thickness,
                           draw_points=draw_points)
 
-    def box_plot(self, df, x_label=None, number_size=25, figsize=(15, 10),
+    def box_plot(self, df, x_label=None, fontsize=25, figsize=(15, 10),
                  markersize=12, colors=None, custom_legend=None,
                  legend_loc='best', legend_font_size='10',
                  legend_marker_size=0.85, box_line_thickness=1.75,
@@ -842,7 +840,7 @@ class NestedKFoldCrossValidation(object):
         """
         tick_labels = [str(column) for column in df.columns]
 
-        number_size = number_size
+        fontsize = fontsize
 
         # Draw figure and axis
         fig, ax = plt.subplots(figsize=figsize)
@@ -935,9 +933,9 @@ class NestedKFoldCrossValidation(object):
 
         # Set tick labels and sizes
         plt.setp(ax, yticklabels=tick_labels)
-        plt.setp(ax.get_yticklabels(), fontsize=number_size)
+        plt.setp(ax.get_yticklabels(), fontsize=fontsize)
 
-        plt.setp(ax.get_xticklabels(), fontsize=number_size)
+        plt.setp(ax.get_xticklabels(), fontsize=fontsize)
 
         # Adjust limits so plot elements aren't cut off
         x_ticks, x_tick_labels = plt.xticks()
@@ -955,7 +953,7 @@ class NestedKFoldCrossValidation(object):
         plt.xticks(x_ticks)
 
         # Place x- and y-labels
-        plt.xlabel(x_label, size=number_size)
+        plt.xlabel(x_label, size=fontsize)
         # plt.ylabel(y_label,size=small_text_size)
 
         # Move ticks to where I want them
@@ -1042,7 +1040,8 @@ class NestedKFoldCrossValidation(object):
 
         return step_colors
 
-    def get_colors(self, df, color_by=None, color_map='viridis'):
+    def get_colors(self, df, color_by=None, color_map='viridis',
+                   highlight_best=None):
         """
         """
         # Get choose colors for each step option and collect corresponding
