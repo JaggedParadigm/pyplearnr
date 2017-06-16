@@ -38,7 +38,8 @@ class NestedKFoldCrossValidation(object):
     """
     def __init__(self, outer_loop_fold_count=3, inner_loop_fold_count=3,
                  outer_loop_split_seed=None, inner_loop_split_seeds=None,
-                 shuffle_seed=None, shuffle_flag=True):
+                 shuffle_seed=None, shuffle_flag=True,
+                 random_combinations=None, random_combination_seed=None):
         """
         Parameters
         ----------
@@ -86,6 +87,9 @@ class NestedKFoldCrossValidation(object):
 
         self.inner_loop_split_seeds = inner_loop_split_seeds
 
+        self.random_combinations = random_combinations
+        self.random_combination_seed = random_combination_seed
+
         ############### Initialize other fields ###############
         # Shuffled data indices
         self.shuffled_data_inds = None
@@ -115,21 +119,25 @@ class NestedKFoldCrossValidation(object):
         self.best_pipeline_ind = None
 
         ############### Populate fields with defaults ###############
-        if not self.shuffle_seed:
+        if self.shuffle_seed is None:
             self.shuffle_seed = random.randint(1,5000)
 
         # Generate seeds if not given (*200 since 5-fold CV results in range
         # of 1 to 1000)
-        if not self.outer_loop_split_seed:
+        if self.outer_loop_split_seed is None:
             self.outer_loop_split_seed = random.randint(
                                             1,
                                             self.outer_loop_fold_count*200)
 
-        if not self.inner_loop_split_seeds:
+        if self.inner_loop_split_seeds is None:
             self.inner_loop_split_seeds = np.random.randint(
                                             1,
                                             high=self.inner_loop_fold_count*200,
                                             size=self.outer_loop_fold_count)
+
+        if self.random_combinations is not None:
+            if self.random_combination_seed is None:
+                self.random_combination_seed = random.randint(1,5000)
 
         ############### Check fields so far ###############
         outer_loop_fold_count_error = "The outer_loop_fold_count" \
@@ -162,6 +170,17 @@ class NestedKFoldCrossValidation(object):
         assert len(self.inner_loop_split_seeds) == self.outer_loop_fold_count, \
             "The number of inner-loop contest seeds must be equal to the " \
             "number of outer-folds"
+
+        if self.random_combinations is not None:
+            assert type(self.random_combinations) is int, "The number of " \
+                "pipeline step/parameter combinations, random_combinations," \
+                " must be of type int."
+
+        if self.random_combination_seed is not None:
+            assert type(self.random_combination_seed) is int, "The seed " \
+                "determining how the exact pipeline step/parameter " \
+                "combinations is chosen, random_combination_seed," \
+                " must be of type int."
 
     def fit(self, X, y, pipelines, stratified=True, scoring_metric='auc',
             tie_breaker='choice', best_inner_fold_pipeline_inds=None,
@@ -259,8 +278,20 @@ class NestedKFoldCrossValidation(object):
                 self.shuffle_data()
 
                 ############### Save pipelines ###############
-                self.pipelines = {pipeline_ind: pipeline \
-                    for pipeline_ind, pipeline in enumerate(pipelines)}
+                if self.random_combinations is None:
+                    self.pipelines = {pipeline_ind: pipeline \
+                        for pipeline_ind, pipeline in enumerate(pipelines)}
+                else:
+                    shuffled_pipeline_inds = np.arange(len(pipelines))
+
+                    random.seed(self.random_combination_seed)
+
+                    random.shuffle(shuffled_pipeline_inds)
+
+                    self.pipelines = {
+                        int(pipeline_ind): pipelines[pipeline_ind] for pipeline_ind \
+                        in shuffled_pipeline_inds[:self.random_combinations]
+                    }
 
                 ########## Derive outer and inner loop split indices ##########
                 self.get_outer_split_indices(self.shuffled_X, y=self.shuffled_y,
@@ -331,7 +362,6 @@ class NestedKFoldCrossValidation(object):
             # pipeline. There is no test data when training on all data. Hence
             # it doesn't make sense to the pipeline after fitting.
             self.pipeline.pipeline.fit(self.shuffled_X, self.shuffled_y)
-
 
     def train_winning_pipeline_on_outer_folds(self):
         """
@@ -692,6 +722,9 @@ class NestedKFoldCrossValidation(object):
                                      for seed in self.inner_loop_split_seeds]),
             'scoring_metric': self.scoring_metric,
             'score_type': self.score_type,
+
+            'random_combinations': self.random_combinations,
+            'random_combination_seed': self.random_combination_seed
         }
 
         report_str = \
@@ -721,6 +754,9 @@ class NestedKFoldCrossValidation(object):
         shuffle seed:\t\t\t{shuffle_seed}
         outer-loop split seed:\t\t{outer_loop_split_seed}
         inner-loop split seeds:\t\t{inner_loop_split_seeds}
+
+        random combinations:\t\t{random_combinations}
+        random combination seed:\t{random_combination_seed}
         {divider}
 
         """.format(**str_inputs)
@@ -998,14 +1034,10 @@ class NestedKFoldCrossValidation(object):
         """
         organized_pipelines = {}
 
-        if '__' not in step_type:
-            pass
-        else:
+        if '__' in step_type:
             step_type, step_option, step_parameter = step_type.split('__')
-            print step_type, step_option, step_parameter
 
-        raise Exception()
-
+        # raise Exception()
         for pipeline_ind, pipeline in self.pipelines.iteritems():
             step_type_found = False
 
@@ -1014,8 +1046,22 @@ class NestedKFoldCrossValidation(object):
                 if step[0] == step_type:
                     step_type_found = True
 
-                    
                     step_name = step[1].__class__.__name__
+
+                    if '__' not in step_type:
+                        parameter_name_found = False
+
+                        step_parameters = step[1].get_params()
+
+                        if step_parameter in step_parameters:
+                            parameter_name_found = True
+
+                            parameter_value = step_parameters[step_parameter]
+
+                            value_parameter = "%s__%s"%(parameter_value,
+                                                        step_parameter)
+
+                            step_name = "%s__%s"%(value_parameter, step_name)
 
                     # Initialize the pipeline indices for this step name if not
                     # found
@@ -1039,6 +1085,16 @@ class NestedKFoldCrossValidation(object):
 
         return organized_pipelines
 
+    def order_by_parameter(self, parameter_str):
+        parameter_value = parameter_str.split('__')[0]
+
+        try:
+            key_value = int(parameter_value)
+        except:
+            key_value = parameter_value
+
+        return key_value
+
     def get_step_colors(self, df, color_by=None, color_map='viridis'):
         """
         """
@@ -1054,9 +1110,13 @@ class NestedKFoldCrossValidation(object):
 
         scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cmap)
 
+        sorted_steps = sorted(step_colors.keys(), key=self.order_by_parameter)
+
         # Set internal colors
         color_ind = 0
-        for step_name, step in step_colors.iteritems():
+        for step_name in sorted_steps:
+            step = step_colors[step_name]
+
             if step_name == 'None':
                 step['color'] = 'k'
             else:
@@ -1095,9 +1155,7 @@ class NestedKFoldCrossValidation(object):
         step_colors = self.get_step_colors(df, color_by=color_by,
                                            color_map=color_map)
 
-        labels = step_colors.keys()
-
-        descriptions = labels
+        labels = sorted(step_colors.keys(), key=self.order_by_parameter)
 
         proxies = [self.create_proxy(step_colors[item]['color']) \
                    for item in labels]
