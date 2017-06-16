@@ -83,32 +83,55 @@ class PipelineBuilder(object):
         # Obtain all corresponding scikit-learn package options with all
         # parameter combinations for each step
         pipeline_options = []
-        for x in pipeline_bundle_schematic:
-            step_name = x.keys()[0]
 
-            step_options = x[step_name]
+        for step in pipeline_bundle_schematic:
+            step_name = step.keys()[0]
+
+            step_options = step[step_name]
 
             step_iterations = []
             for step_option, step_parameters in step_options.iteritems():
-                parameter_names = step_parameters.keys()
+                if step_option != 'none':
+                    # Get the parameter names for the current step option
+                    parameter_names = [parameter_name for parameter_name \
+                        in step_parameters.keys()]
 
-                parameter_combos = [step_parameters[step_parameter_name] \
-                                    for step_parameter_name in parameter_names]
-
-                for parameter_combo in list(itertools.product(*parameter_combos)):
-                    parameter_kwargs = {pair[0]: pair[1] \
-                                        for pair in zip(parameter_names,
-                                                        parameter_combo)}
-
-
-                    if step_option != 'none':
-                        step = (step_name,
-                                sklearn_packages[step_name][step_option](
-                                    **parameter_kwargs))
-
-                        step_iterations.append(step)
+                    # Obtain scikit-learn object for the step option
+                    if 'sklo' in parameter_names:
+                        # Use user-provided object if they mark one of the
+                        # step-option parameter names as 'sklo' (scikit-learn
+                        # object)
+                        sklearn_object = step_parameters['sklo']
                     else:
-                        step_iterations.append(None)
+                        # Use default object if supported
+                        if step_option != 'none':
+                            sklearn_object = sklearn_packages[step_name][step_option]
+
+                    # Form all parameter combinations for the current step option
+                    parameter_combos = [step_parameters[step_parameter_name] \
+                                        for step_parameter_name in parameter_names \
+                                        if step_parameter_name != 'sklo']
+
+                    # Remove 'sklo'
+                    parameter_names = [parameter_name for parameter_name \
+                                       in parameter_names \
+                                       if parameter_name != 'sklo']
+
+                    # Form all parameter combinations for current step option
+                    # and form and append step tuple
+                    for parameter_combo in list(itertools.product(*parameter_combos)):
+
+                        parameter_kwargs = {pair[0]: pair[1] \
+                                            for pair in zip(parameter_names,
+                                                            parameter_combo)}
+
+                        step_addendum = (step_name,
+                                         sklearn_object(**parameter_kwargs))
+
+                        step_iterations.append(step_addendum)
+                else:
+                    # Append nothing if the step is to be ignored
+                    step_iterations.append(None)
 
             pipeline_options.append(step_iterations)
 
