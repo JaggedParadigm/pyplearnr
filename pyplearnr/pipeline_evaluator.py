@@ -56,6 +56,8 @@ class PipelineEvaluator(object):
                             "predicted target arrays, must both be of shape " \
                             "(m, )")
 
+        y, y_pred = self.remove_nan(y, y_pred)
+
         ############### Calculate score ###############
         if scoring_metric == 'auc':
             # Get ROC curve points
@@ -72,6 +74,17 @@ class PipelineEvaluator(object):
             score = sklearn_metrics.accuracy_score(y, y_pred)
 
         return score
+
+    def remove_nan(self, y, y_pred):
+        """
+        Removes rows from y and y_pred if either have nan values
+        """
+        kept_inds = [row_ind for row_ind in range(y.shape[0]) if ~np.isnan(y_pred[row_ind])]
+
+        no_nan_y = y[kept_inds]
+        no_nan_y_pred = y_pred[kept_inds]
+
+        return no_nan_y, no_nan_y_pred
 
     def metric_supported(self, metric):
         """
