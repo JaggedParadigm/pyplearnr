@@ -900,7 +900,7 @@ class NestedKFoldCrossValidation(object):
         # Set grid parameters
         ax.yaxis.grid(False)
         ax.xaxis.grid(True, linestyle='--', which='both', color='black',
-                       alpha=0.5)
+                       alpha=0.5, zorder=1)
 
         # Set left frame attributes
         ax.spines['left'].set_linewidth(1.8)
@@ -915,6 +915,7 @@ class NestedKFoldCrossValidation(object):
 
         # Draw box plot
         box_plot_kwargs = dict(
+            zorder=2,
             notch=0,
             sym='+',
             vert=False,
@@ -970,15 +971,6 @@ class NestedKFoldCrossValidation(object):
                 # Plot data points
                 plt.plot(x,y,'.',color='k',markersize=markersize)
 
-        # Draw a white dot for medians
-        for column_ind,column in enumerate(df.columns):
-            x_median = np.median(df[column].values)
-            y_median = (column_ind+1)*np.ones(1)
-
-            # Plot data points
-            plt.plot(x_median,y_median,'o',color='white',markersize=markersize,
-                     markeredgecolor='white')
-
 
         # Set tick labels and sizes
         plt.setp(ax, yticklabels=tick_labels)
@@ -1017,6 +1009,15 @@ class NestedKFoldCrossValidation(object):
 
             plt.setp(plt.gca().get_legend().get_texts(),
                      fontsize=legend_font_size)
+
+        # Draw a white dot for medians
+        for column_ind,column in enumerate(df.columns):
+            x_median = np.median(df[column].values)
+            y_median = (column_ind+1)*np.ones(1)
+
+            # Plot data points
+            plt.plot(x_median,y_median,'o',color='white',markersize=markersize,
+                     markeredgecolor='white', zorder=3)
 
         # Display plot
         plt.show()
