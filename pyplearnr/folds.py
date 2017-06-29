@@ -6,8 +6,6 @@ import numpy as np
 
 from sklearn.base import clone
 
-# from .pipeline_evaluator import PipelineEvaluator
-
 from .trained_pipeline import TrainedPipeline, OuterFoldTrainedPipeline
 
 class Fold(object):
