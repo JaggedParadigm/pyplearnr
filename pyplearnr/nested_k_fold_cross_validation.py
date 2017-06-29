@@ -377,6 +377,18 @@ class NestedKFoldCrossValidation(object):
             # it doesn't make sense to the pipeline after fitting.
             self.pipeline.pipeline.fit(self.shuffled_X, self.shuffled_y)
 
+    def predict(self, X):
+        """
+        Uses the best pipeline to make a class prediction.
+        """
+        return self.pipeline.pipeline.predict(X)
+
+    def predict_proba(self, X):
+        """
+        Uses the best pipeline to give the probability of each result
+        """
+        return self.pipeline.pipeline.predict_proba(X)
+
     def train_winning_pipeline_on_outer_folds(self):
         """
         Trains and obtains validation scores for the winning model of the
