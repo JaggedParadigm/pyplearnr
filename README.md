@@ -6,15 +6,40 @@ For now, simply clone the respository, link to the location in your code, and im
 See the [demo](https://nbviewer.jupyter.org/github/JaggedParadigm/pyplearnr/blob/master/pyplearnr_demo.ipynb) for use of pyplearnr.
 
 # What
-Pyplearnr is a way to build, validate, and test multiple scikit learn pipelines, with varying steps, in a less verbose manner.
+Pyplearnr is a tool designed to easily and more elegantly build, validate, and test scikit-learn pipelines.
 
-Quick keyword arguments give access to optional feature selection (e.g. SelectKBest), scaling (e.g. standard scaling), use of feature interactions, and data transformations (e.g. PCA, t-SNE) before being fed to a classifier/regressor.
+One core aspect of pyplearnr is the combinatorial pipeline schematic, a flexible diagram of every step (e.g. estimator), step option (e.g. knn, logistic regression, etc.), and parameter option (e.g. n_neighbors for knn and C for logistic regression) combination. Any scikit-learn class instance you would use in a normal pipeline can be inserted or one can be chosen from a list of supported ones. 
 
-After building the pipeline, data can be used to perform a nested (stratified if classification) k-folds cross-validation and output an object containing data from the process, including the best model.
+Here's an example with optional scaling, PCA, selection of the number of principal components to use, and the use of k-nearest neighbors with different values for the number of neighbors:
+```python
+pipeline_schematic = [
+    {'scaler': {
+            'min_max': {},
+            'standard': {}
+        }
+    },
+    {'transform': {
+            'pca': {
+                'n_components': [feature_count]
+            }
+        }         
+    },
+    {'feature_selection': {
+            'select_k_best': {
+                'k': range(1, feature_count+1)
+            }
+        }
+    },
+    {'estimator': {
+            'knn': {
+                'n_neighbors': range(1,31)
+                }
+        }
+    }
+]
+```
 
-Various default pipeline step parameters for the grid-search are available for quick iteration over different pipelines, with the option to ignore/override them in a flexible way.
-
-This is an on-going project that I intend to update with more models and pre-processing options and also with corresponding defaults.
+The core validation method is nested k-fold cross-validation (stratified if for classification). Pyplearnr divides the data into k validation outer-folds and their corresponding training sets into k test inner-folds, picks the best pipeline as that having the highest score (median by default) for the inner-folds for each outer-fold, chooses the winning pipeline as that with the most wins, and uses the validation outer-folds to give an estimate of the ultimate winner's out-of-sample scores. This final pipeline can then be used to make predictions.
 
 # Why
-I wanted to a way to quickly find the best cross-validated model for a given dataset using convenient grid-search parameter defaults in the most succinct manner possible.
+I wanted to a way to do what GridSearchCV does for specific estimators with any estimator in a repeatable way.
