@@ -1,0 +1,14 @@
+setup.py
+pyplearnr/__init__.py
+pyplearnr/folds.py
+pyplearnr/nested_k_fold_cross_validation.py
+pyplearnr/old.py
+pyplearnr/pipeline_builder.py
+pyplearnr/pipeline_evaluator.py
+pyplearnr/trained_pipeline.py
+pyplearnr.egg-info/PKG-INFO
+pyplearnr.egg-info/SOURCES.txt
+pyplearnr.egg-info/dependency_links.txt
+pyplearnr.egg-info/requires.txt
+pyplearnr.egg-info/top_level.txt
+test/test_pyplearnr.py
