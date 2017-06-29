@@ -20,7 +20,7 @@ setup(
     keywords = "scikit-learn pipeline k-fold cross-validation model selection",
     url = "http://packages.python.org/pyplearnr",
     packages=['pyplearnr', 'test'],
-    long_description=read('README'),
+    long_description=read('README.md'),
     install_requires=[
             'pandas',
             'numpy',
