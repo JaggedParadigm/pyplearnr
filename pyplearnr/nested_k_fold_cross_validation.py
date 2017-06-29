@@ -28,7 +28,7 @@ from .folds import Fold, OuterFold
 
 from .trained_pipeline import OuterFoldTrainedPipeline
 
-
+from .pipeline_builder import PipelineBuilder
 
 class NestedKFoldCrossValidation(object):
     """
@@ -39,7 +39,8 @@ class NestedKFoldCrossValidation(object):
     def __init__(self, outer_loop_fold_count=3, inner_loop_fold_count=3,
                  outer_loop_split_seed=None, inner_loop_split_seeds=None,
                  shuffle_seed=None, shuffle_flag=True,
-                 random_combinations=None, random_combination_seed=None):
+                 random_combinations=None, random_combination_seed=None,
+                 schematic=None):
         """
         Parameters
         ----------
@@ -182,9 +183,10 @@ class NestedKFoldCrossValidation(object):
                 "combinations is chosen, random_combination_seed," \
                 " must be of type int."
 
-    def fit(self, X, y, pipelines, stratified=True, scoring_metric='auc',
+    def fit(self, X, y, pipelines=None, stratified=True, scoring_metric='auc',
             tie_breaker='choice', best_inner_fold_pipeline_inds=None,
-            best_outer_fold_pipeline=None, score_type='median'):
+            best_outer_fold_pipeline=None, score_type='median',
+            pipeline_schematic=None):
         """
         Perform nested k-fold cross-validation on the data using the user-
         provided pipelines.
@@ -259,6 +261,18 @@ class NestedKFoldCrossValidation(object):
         best_outer_fold_pipeline
         score_type
         """
+
+        # Build list of scikit-learn pipelines if not provided by user
+        if pipelines is None:
+            if pipeline_schematic is not None:
+                # Form scikit-learn pipelines using the PipelineBuilder
+                pipelines = PipelineBuilder().build_pipeline_bundle(
+                                                            pipeline_schematic)
+            else:
+                raise Exception("A pipeline schematic keyword argument, " \
+                    "pipeline_schematic, must be provided if no list of " \
+                    "pipelines in the pipelines keyword argument is provided")
+
         if not best_outer_fold_pipeline:
             ######## Choose best inner fold pipelines for outer folds ########
             if not best_inner_fold_pipeline_inds:
@@ -362,6 +376,18 @@ class NestedKFoldCrossValidation(object):
             # pipeline. There is no test data when training on all data. Hence
             # it doesn't make sense to the pipeline after fitting.
             self.pipeline.pipeline.fit(self.shuffled_X, self.shuffled_y)
+
+    def predict(self, X):
+        """
+        Uses the best pipeline to make a class prediction.
+        """
+        return self.pipeline.pipeline.predict(X)
+
+    def predict_proba(self, X):
+        """
+        Uses the best pipeline to give the probability of each result
+        """
+        return self.pipeline.pipeline.predict_proba(X)
 
     def train_winning_pipeline_on_outer_folds(self):
         """
@@ -900,7 +926,7 @@ class NestedKFoldCrossValidation(object):
         # Set grid parameters
         ax.yaxis.grid(False)
         ax.xaxis.grid(True, linestyle='--', which='both', color='black',
-                       alpha=0.5)
+                       alpha=0.5, zorder=1)
 
         # Set left frame attributes
         ax.spines['left'].set_linewidth(1.8)
@@ -970,15 +996,6 @@ class NestedKFoldCrossValidation(object):
                 # Plot data points
                 plt.plot(x,y,'.',color='k',markersize=markersize)
 
-        # Draw a white dot for medians
-        for column_ind,column in enumerate(df.columns):
-            x_median = np.median(df[column].values)
-            y_median = (column_ind+1)*np.ones(1)
-
-            # Plot data points
-            plt.plot(x_median,y_median,'o',color='white',markersize=markersize,
-                     markeredgecolor='white')
-
 
         # Set tick labels and sizes
         plt.setp(ax, yticklabels=tick_labels)
@@ -1018,6 +1035,15 @@ class NestedKFoldCrossValidation(object):
             plt.setp(plt.gca().get_legend().get_texts(),
                      fontsize=legend_font_size)
 
+        # Draw a white dot for medians
+        for column_ind,column in enumerate(df.columns):
+            x_median = np.median(df[column].values)
+            y_median = (column_ind+1)*np.ones(1)
+
+            # Plot data points
+            plt.plot(x_median,y_median,'o',color='white',markersize=markersize,
+                     markeredgecolor='white', zorder=3)
+
         # Display plot
         plt.show()
 
@@ -1036,8 +1062,9 @@ class NestedKFoldCrossValidation(object):
 
         if '__' in step_type:
             step_type, step_option, step_parameter = step_type.split('__')
+        else:
+            step_type, step_option, step_parameter = step_type, None, None
 
-        # raise Exception()
         for pipeline_ind, pipeline in self.pipelines.iteritems():
             step_type_found = False
 
@@ -1048,7 +1075,10 @@ class NestedKFoldCrossValidation(object):
 
                     step_name = step[1].__class__.__name__
 
-                    if '__' not in step_type:
+                    # Are we interested in coloring by step parameter?
+                    if step_option is not None and step_parameter is not None:
+                    # if '__' in step_type:
+
                         parameter_name_found = False
 
                         step_parameters = step[1].get_params()
