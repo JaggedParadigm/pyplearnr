@@ -40,7 +40,7 @@ pipeline_schematic = [
 The core validation method is nested k-fold cross-validation (stratified if for classification). Pyplearnr divides the data into k validation outer-folds and their corresponding training sets into k test inner-folds, picks the best pipeline as that having the highest score (median by default) for the inner-folds for each outer-fold, chooses the winning pipeline as that with the most wins, and uses the validation outer-folds to give an estimate of the ultimate winner's out-of-sample scores. This final pipeline can then be used to make predictions.
 
 # Why
-I wanted to a way to do what GridSearchCV does for specific estimators with any estimator in a repeatable way.
+I wanted a way to do what GridSearchCV does for specific estimators with any estimator in a repeatable way.
 
 # How
 ### Installation
