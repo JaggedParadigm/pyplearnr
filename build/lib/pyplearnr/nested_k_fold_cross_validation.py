@@ -2,6 +2,9 @@
 # License: ALv2
 # Date created: 2016-11-25
 
+# Python 2/3 compatibility
+from __future__ import print_function
+
 # Basic tools
 import numpy as np
 import pandas as pd
@@ -312,13 +315,13 @@ class NestedKFoldCrossValidation(object):
                                              stratified=stratified)
 
                 ########### Perform nested k-fold cross-validation ###########
-                for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+                for outer_fold_ind, outer_fold in self.outer_folds.items():
                     outer_fold.fit(self.shuffled_X, self.shuffled_y,
                                    self.pipelines,
                                    scoring_metric=self.scoring_metric)
             else:
                 for outer_fold_ind, best_pipeline_ind in \
-                    best_inner_fold_pipeline_inds.iteritems():
+                    best_inner_fold_pipeline_inds.items():
 
                     self.outer_folds[outer_fold_ind].fit(
                         self.shuffled_X, self.shuffled_y, self.pipelines,
@@ -419,7 +422,7 @@ class NestedKFoldCrossValidation(object):
         # Collect all winning pipelines from each inner loop contest of each
         # outer fold
         outer_fold_winners = [outer_fold.best_pipeline_ind \
-            for outer_fold_ind, outer_fold in self.outer_folds.iteritems()]
+            for outer_fold_ind, outer_fold in self.outer_folds.items()]
 
         # Check if all folds have winners yet
         none_flag = False
@@ -432,9 +435,9 @@ class NestedKFoldCrossValidation(object):
             # Determine winner of all folds by majority vote
             counts = {x: outer_fold_winners.count(x) for x in outer_fold_winners}
 
-            max_count = max([count for x, count in counts.iteritems()])
+            max_count = max([count for x, count in counts.items()])
 
-            mode_inds = [x for x, count in counts.iteritems() if count==max_count]
+            mode_inds = [x for x, count in counts.items() if count==max_count]
 
             best_pipeline_ind = None
 
@@ -447,13 +450,13 @@ class NestedKFoldCrossValidation(object):
                         # Encourage user to choose simplest model if there is no clear
                         # winner
                         for mode_ind in mode_inds:
-                            print mode_ind, self.pipelines[mode_ind]
-                        print "\n\nNo model was chosen because there is no clear winner. " \
+                            print(mode_ind, self.pipelines[mode_ind])
+                        print("\n\nNo model was chosen because there is no clear winner. " \
                               "Please use the same fit method with one of the "\
                               "indices above.\n\nExample:\tkfcv.fit(X.values, " \
                               "y.values, pipelines)\n\t\t"\
                               "kfcv.fit(X.values, y.values, pipelines, " \
-                              "best_outer_fold_pipeline=9)"
+                              "best_outer_fold_pipeline=9)")
                     elif tie_breaker=='first':
                         best_pipeline_ind = mode_inds[0]
             else:
@@ -582,7 +585,7 @@ class NestedKFoldCrossValidation(object):
 
     def print_report(self):
         if self.best_pipeline_ind is not None:
-            print self.get_report()
+            print(self.get_report())
 
     def get_report(self):
         """
@@ -603,10 +606,10 @@ class NestedKFoldCrossValidation(object):
         inner_fold_inds = []
 
         # Collect all outer- and inner-fold labels and populate score matrix
-        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+        for outer_fold_ind, outer_fold in self.outer_folds.items():
             if outer_fold_ind not in outer_fold_inds:
                 outer_fold_inds.append(outer_fold_ind)
-            for inner_fold_ind, inner_fold in outer_fold.inner_folds.iteritems():
+            for inner_fold_ind, inner_fold in outer_fold.inner_folds.items():
                 if inner_fold_ind not in inner_fold_inds:
                     inner_fold_inds.append(inner_fold_ind)
                 score = inner_fold.pipelines[ \
@@ -797,7 +800,7 @@ class NestedKFoldCrossValidation(object):
                                   box_line_thickness=1):
         # Get data
         best_pipeline_data = {}
-        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+        for outer_fold_ind, outer_fold in self.outer_folds.items():
             best_pipeline_data[outer_fold_ind] = \
                 outer_fold.pipelines[self.best_pipeline_ind].inner_loop_test_scores
 
@@ -823,8 +826,8 @@ class NestedKFoldCrossValidation(object):
         # Collect pipeline data for each outer-fold contest
         pipeline_data = {pipeline_ind: {} for pipeline_ind in self.pipelines}
 
-        for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
-            for pipeline_ind, pipeline in outer_fold.pipelines.iteritems():
+        for outer_fold_ind, outer_fold in self.outer_folds.items():
+            for pipeline_ind, pipeline in outer_fold.pipelines.items():
                 pipeline_data[pipeline_ind][outer_fold_ind] = \
                     outer_fold.pipelines[pipeline_ind].inner_loop_test_scores
 
@@ -870,11 +873,11 @@ class NestedKFoldCrossValidation(object):
         else:
             # Combine all data for each pipeline and graph all together
             all_fold_data = {}
-            for pipeline_ind, outer_fold_pipeline_data in pipeline_data.iteritems():
+            for pipeline_ind, outer_fold_pipeline_data in pipeline_data.items():
                 if pipeline_ind not in all_fold_data:
                     all_fold_data[pipeline_ind] = []
 
-                for outer_fold_ind, outer_fold in self.outer_folds.iteritems():
+                for outer_fold_ind, outer_fold in self.outer_folds.items():
                     all_fold_data[pipeline_ind].extend(
                         pipeline_data[pipeline_ind][outer_fold_ind])
 
@@ -1065,7 +1068,7 @@ class NestedKFoldCrossValidation(object):
         else:
             step_type, step_option, step_parameter = step_type, None, None
 
-        for pipeline_ind, pipeline in self.pipelines.iteritems():
+        for pipeline_ind, pipeline in self.pipelines.items():
             step_type_found = False
 
             # Does this pipeline have this step?
@@ -1170,7 +1173,7 @@ class NestedKFoldCrossValidation(object):
         for pipeline_ind in df.columns:
             ind_found = False
 
-            for step_name, step in step_colors.iteritems():
+            for step_name, step in step_colors.items():
                 if pipeline_ind in step['pipeline_inds']:
                     colors.append(step['color'])
 
