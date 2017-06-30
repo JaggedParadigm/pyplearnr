@@ -1,0 +1,10 @@
+name: pyplearnr_env
+dependencies:
+- python=2.7.12
+- scikit-learn
+- numpy
+- scipy
+- pandas
+- matplotlib
+- nb_conda
+- line_profiler
