@@ -1,6 +1,6 @@
 Metadata-Version: 1.1
 Name: pyplearnr
-Version: 1.0.3
+Version: 1.0.8
 Summary: Pyplearnr is a tool designed to easily and more elegantly build, validate (nested k-fold cross-validation), and test scikit-learn pipelines.
 Home-page: http://packages.python.org/pyplearnr
 Author: Christopher Shymansky
