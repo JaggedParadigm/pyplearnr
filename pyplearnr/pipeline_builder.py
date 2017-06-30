@@ -85,12 +85,12 @@ class PipelineBuilder(object):
         pipeline_options = []
 
         for step in pipeline_bundle_schematic:
-            step_name = step.keys()[0]
+            step_name = list(step.keys())[0]
 
             step_options = step[step_name]
 
             step_iterations = []
-            for step_option, step_parameters in step_options.iteritems():
+            for step_option, step_parameters in step_options.items():
                 if step_option != 'none':
                     # Get the parameter names for the current step option
                     parameter_names = [parameter_name for parameter_name \
