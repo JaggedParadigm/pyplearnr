@@ -2,6 +2,9 @@
 # License: ALv2
 # Date created: 2016-11-25
 
+# Python 2/3 compatibility
+from __future__ import print_function
+
 import numpy as np
 
 from sklearn.base import clone
@@ -238,16 +241,16 @@ class OuterFold(Fold):
                 if tie_breaker=='choice':
                     # Encourage user to choose simplest model if there is no clear
                     # winner
-                    print "Outer Fold: %d"%(self.fold_id), '\n'
+                    print("Outer Fold: %d"%(self.fold_id), '\n')
                     for pipeline_ind in best_pipeline_inds:
-                        print pipeline_ind, self.pipelines[pipeline_ind].pipeline
-                    print "\n\nNo model was chosen because there is no clear " \
+                        print(pipeline_ind, self.pipelines[pipeline_ind].pipeline)
+                    print("\n\nNo model was chosen because there is no clear " \
                           "winner. Please use the same fit method with " \
                           "best_inner_fold_pipeline_inds keyword argument." \
                           "\n\nExample:\tkfcv.fit(X.values, y.values, " \
                           "pipelines)\n\t\tkfcv.fit(X.values, y.values, " \
                           "pipelines, \n\t\t\t best_inner_fold_pipeline_inds = "\
-                          "{0:9, 2:3})\n"
+                          "{0:9, 2:3})\n")
                 elif tie_breaker == 'first':
                     best_pipeline_ind = best_pipeline_inds[0]
         else:
