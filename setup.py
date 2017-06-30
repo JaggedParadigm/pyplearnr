@@ -10,7 +10,7 @@ def read(fname):
 
 setup(
     name = "pyplearnr",
-    version = "1.0.3",
+    version = "1.0.8",
     author = "Christopher Shymansky",
     author_email = "CMShymansky@gmail.com",
     description = ("Pyplearnr is a tool designed to easily and more " \
@@ -25,8 +25,7 @@ setup(
             'pandas',
             'numpy',
             'sklearn',
-            'matplotlib',
-            'pylab'
+            'matplotlib'
         ],
     classifiers=[
         "Development Status :: 3 - Alpha",
