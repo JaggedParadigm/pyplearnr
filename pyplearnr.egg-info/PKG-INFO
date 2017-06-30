@@ -1,16 +1,12 @@
 Metadata-Version: 1.1
 Name: pyplearnr
-Version: 1.0.8
+Version: 1.0.9
 Summary: Pyplearnr is a tool designed to easily and more elegantly build, validate (nested k-fold cross-validation), and test scikit-learn pipelines.
 Home-page: http://packages.python.org/pyplearnr
 Author: Christopher Shymansky
 Author-email: CMShymansky@gmail.com
 License: ALv2
-Description: # How
-        ## Installation
-        For now, simply clone the respository, link to the location in your code, and import it. 
-        
-        ## Use
+Description: ## Use
         See the [demo](https://nbviewer.jupyter.org/github/JaggedParadigm/pyplearnr/blob/master/pyplearnr_demo.ipynb) for use of pyplearnr.
         
         # What
@@ -18,16 +14,18 @@ Description: # How
         
         One core aspect of pyplearnr is the combinatorial pipeline schematic, a flexible diagram of every step (e.g. estimator), step option (e.g. knn, logistic regression, etc.), and parameter option (e.g. n_neighbors for knn and C for logistic regression) combination. Any scikit-learn class instance you would use in a normal pipeline can be inserted or one can be chosen from a list of supported ones. 
         
-        Here's an example with optional scaling, PCA, selection of the number of principal components to use, and the use of k-nearest neighbors with different values for the number of neighbors:
+        Here's an example with optional scaling, PCA (directly from the sklearn object), selection of the number of principal components to use, and the use of k-nearest neighbors with different values for the number of neighbors:
         ```python
         pipeline_schematic = [
             {'scaler': {
+                    'none': {},
                     'min_max': {},
                     'standard': {}
                 }
             },
             {'transform': {
                     'pca': {
+                        'sklo': sklearn.decomposition.PCA,
                         'n_components': [feature_count]
                     }
                 }         
@@ -51,6 +49,51 @@ Description: # How
         
         # Why
         I wanted to a way to do what GridSearchCV does for specific estimators with any estimator in a repeatable way.
+        
+        # How
+        ### Installation
+        ##### Dependencies
+        
+        pyplearnr requires:
+        
+        Python (>= 2.7 or >= 3.3)
+        scikit-learn (>= 0.18.2)
+        numpy (>= 1.13.0)
+        scipy (>= 0.19.1)
+        pandas (>= 0.20.2)
+        matplotlib (>= 2.0.2)
+        
+        For use in Jupyter notebooks and the conda installation, I recommend having nb_conda (>= 2.2.0).
+        
+        ### User installation
+        Currently, installation is handled by using pip to install from the Github repository. I'm currently working on making this easier. 
+        
+        For now, from the command line use:
+        
+        ```
+        pip install git+git://github.com/JaggedParadigm/pyplearnr.git@master
+        ```
+        
+        For conda, you can issue the same command above or you can include in your environment.yml file this:
+        
+        ```
+        - pip:
+            - git+https://github.com/JaggedParadigm/pyplearnr.git#egg=pyplearnr
+        ```
+        
+        and then either generate a new environment from the terminal using:
+        
+        ```
+        conda env create
+        ```
+        
+        or update an existing one (environment_name) using:
+        
+        ```
+        conda env update -n=environment_name -f=./environment.yml
+        ```
+        
+        Another option is to simply clone the respository, link to the location in your code, and import it. 
 Keywords: scikit-learn pipeline k-fold cross-validation model selection
 Platform: UNKNOWN
 Classifier: Development Status :: 3 - Alpha
