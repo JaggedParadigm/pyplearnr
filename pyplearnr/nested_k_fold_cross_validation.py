@@ -2,6 +2,9 @@
 # License: ALv2
 # Date created: 2016-11-25
 
+# Python 2/3 compatibility
+from __future__ import print_function
+
 # Basic tools
 import numpy as np
 import pandas as pd
@@ -447,13 +450,13 @@ class NestedKFoldCrossValidation(object):
                         # Encourage user to choose simplest model if there is no clear
                         # winner
                         for mode_ind in mode_inds:
-                            print mode_ind, self.pipelines[mode_ind]
-                        print "\n\nNo model was chosen because there is no clear winner. " \
+                            print(mode_ind, self.pipelines[mode_ind])
+                        print("\n\nNo model was chosen because there is no clear winner. " \
                               "Please use the same fit method with one of the "\
                               "indices above.\n\nExample:\tkfcv.fit(X.values, " \
                               "y.values, pipelines)\n\t\t"\
                               "kfcv.fit(X.values, y.values, pipelines, " \
-                              "best_outer_fold_pipeline=9)"
+                              "best_outer_fold_pipeline=9)")
                     elif tie_breaker=='first':
                         best_pipeline_ind = mode_inds[0]
             else:
@@ -582,7 +585,7 @@ class NestedKFoldCrossValidation(object):
 
     def print_report(self):
         if self.best_pipeline_ind is not None:
-            print self.get_report()
+            print(self.get_report())
 
     def get_report(self):
         """
