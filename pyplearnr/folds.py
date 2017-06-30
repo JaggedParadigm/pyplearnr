@@ -44,7 +44,7 @@ class Fold(object):
         self.X_train = outer_loop_X_train[self.train_fold_inds]
         self.y_train = outer_loop_y_train[self.train_fold_inds]
 
-        for pipeline_id, pipeline in pipelines.iteritems():
+        for pipeline_id, pipeline in pipelines.items():
             pipeline_kwargs = {
             'pipeline_id': pipeline_id,
             'pipeline': clone(pipeline, safe=True),
@@ -280,17 +280,17 @@ class OuterFold(Fold):
         """
         # Collect scores for each pipeline
         centrality_measures = {}
-        for pipeline_ind, pipeline in self.pipelines.iteritems():
+        for pipeline_ind, pipeline in self.pipelines.items():
              centrality_measures[pipeline_ind] = \
                 pipeline.get_inner_loop_score_center(score_type=score_type,
                                                      fold_type='test')
 
         # Find maximum score and corresponding index
-        max_score = max([score for x, score in centrality_measures.iteritems()])
+        max_score = max([score for x, score in centrality_measures.items()])
 
 
         winner_inds = [pipeline_ind for pipeline_ind, score \
-                     in centrality_measures.iteritems() if score==max_score]
+                     in centrality_measures.items() if score==max_score]
 
         return winner_inds
 
@@ -306,7 +306,7 @@ class OuterFold(Fold):
             Labeled pipeslines to obtain all inner-fold scores from
 
         """
-        for pipeline_id, pipeline in pipelines.iteritems():
+        for pipeline_id, pipeline in pipelines.items():
             pipeline_kwargs = {
             'pipeline_id': pipeline_id,
             'pipeline': clone(pipeline, safe=True),
