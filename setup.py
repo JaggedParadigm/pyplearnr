@@ -6,7 +6,7 @@ def read(fname):
 
 setup(
     name = "pyplearnr",
-    version = "1.0.10.1",
+    version = "1.0.11",
     author = "Christopher Shymansky",
     author_email = "CMShymansky@gmail.com",
     description = ("Pyplearnr is a tool designed to easily and more " \
