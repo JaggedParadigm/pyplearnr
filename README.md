@@ -20,15 +20,13 @@ matplotlib (>= 2.0.2)
 For use in Jupyter notebooks and the conda installation, I recommend having nb_conda (>= 2.2.0).
 
 ### User installation
-Currently, installation is handled by using pip to install from the Github repository. I'm currently working on making this easier. 
-
-For now, from the command line use:
+Install by using pip:
 
 ```
-pip install git+git://github.com/JaggedParadigm/pyplearnr.git@master
+pip install pyplearnr
 ```
 
-For conda, you can issue the same command above or you can include in your environment.yml file this:
+For conda, you can issue the same command above within a conda environment or you can include in your environment.yml file this:
 
 ```
 - pip:
