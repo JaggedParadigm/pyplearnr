@@ -1,57 +1,24 @@
 # What
-Pyplearnr is a tool designed to easily and more elegantly build, select, and validate scikit-learn pipelines using nested k-fold cross-validation.
+Pyplearnr is a tool designed to perform model selection, hyperparameter tuning, and model validation via nested k-fold cross-validation in a reproducible way.
+
+# Why
+I found GridSearchCV to be lacking. I wanted a tool that used a similar procedure to perform simultaneous hyperparameter tuning AND model selection with a clear input that summarizes exactly what scikit-learn pipeline steps and parameter combinations will used and whose results allow perfect reproducibility. So, I made my own.
 
 # How
 ### Use
-See the [demo](https://nbviewer.jupyter.org/github/JaggedParadigm/pyplearnr/blob/master/pyplearnr_demo.ipynb) for use of pyplearnr.
+See the [demo](https://nbviewer.jupyter.org/github/JaggedParadigm/pyplearnr/blob/master/pyplearnr_demo.ipynb) for more detailed use of pyplearnr with actual data.
 
-### Installation
-##### Dependencies
-
-pyplearnr requires:
-
-Python (>= 2.7 or >= 3.3)
-scikit-learn (>= 0.18.2)
-numpy (>= 1.13.0)
-scipy (>= 0.19.1)
-pandas (>= 0.20.2)
-matplotlib (>= 2.0.2)
-
-For use in Jupyter notebooks and the conda installation, I recommend having nb_conda (>= 2.2.0).
-
-### User installation
-Install by using pip:
-
+Here are the basic steps:
+#### 1) Place feature data into non-null feature matrix and target vector
+#### 2) Initialize the nested k-fold cross-validation object
+```python
+kfcv = ppl.NestedKFoldCrossValidation(outer_loop_fold_count=5, 
+                                      inner_loop_fold_count=5)
 ```
-pip install pyplearnr
-```
+#### 3) Specify the combinatorial pipeline schematic detailing all possible model/parameter combinations 
 
-For conda, you can issue the same command above within a conda environment or you can include in your environment.yml file this:
+Ex: Here's an example of model/parameter combinations of optional scaling of two types, a principal component analysis directly using scikit-learn's sklearn.decomposition.PCA transformer, selection of data transformed by k principal components (between 1 and 30), and the use of either a k-nearest neighbors classifier (k between 1 and 30) or random forest classifier with a maximum depth between 2 and 5 (and a specified random state for reproducibility).
 
-```
-- pip:
-    - git+https://github.com/JaggedParadigm/pyplearnr.git#egg=pyplearnr
-```
-
-and then either generate a new environment from the terminal using:
-
-```
-conda env create
-```
-
-or update an existing one (environment_name) using:
-
-```
-conda env update -n=environment_name -f=./environment.yml
-```
-
-Another option is to simply clone the respository, link to the location in your code, and import it. 
-
-# bleh
-
-One core aspect of pyplearnr is the combinatorial pipeline schematic, a flexible diagram of every step (e.g. estimator), step option (e.g. knn, logistic regression, etc.), and parameter option (e.g. n_neighbors for knn and C for logistic regression) combination. Any scikit-learn class instance you would use in a normal pipeline can be inserted or one can be chosen from a list of supported ones. 
-
-Here's an example with optional scaling, PCA (directly from the sklearn object), selection of the number of principal components to use, and the use of k-nearest neighbors with different values for the number of neighbors:
 ```python
 pipeline_schematic = [
     {'scaler': {
@@ -76,14 +43,81 @@ pipeline_schematic = [
     {'estimator': {
             'knn': {
                 'n_neighbors': range(1,31)
-                }
+            },
+            'random_forest': {
+                'sklo': RandomForestClassifier,
+                'max_depth': range(2,6),
+                'random_state': [57]
+			}
         }
     }
 ]
 ```
 
-The core validation method is nested k-fold cross-validation (stratified if for classification). Pyplearnr divides the data into k validation outer-folds and their corresponding training sets into k test inner-folds, picks the best pipeline as that having the highest score (median by default) for the inner-folds for each outer-fold, chooses the winning pipeline as that with the most wins, and uses the validation outer-folds to give an estimate of the ultimate winner's out-of-sample scores. This final pipeline can then be used to make predictions.
+#### 4) Run pyplearnr
+```python
+# Perform nested k-fold cross-validation
+kfcv.fit(X, y, pipeline_schematic=pipeline_schematic, 
+         scoring_metric='auc', score_type='median')
+```
+### Methodology
+The core model selection and validation method is nested k-fold cross-validation (stratified if for classification). Inner-fold contests are used for model selection and outer-folds are used to cross-validate the final winning model. 
 
-# Why
-I wanted a way to do what GridSearchCV does for specific estimators with any estimator in a repeatable way.
+Here's the basic algorithm used by pyplearnr:
+
+- 1) Pyplearnr shuffles and divides the data into k validation outer-folds. 
+- 2) For each outer-fold:
+	- a) The remaining folds are combined to form the corresponding training set
+	- b)  This training set is divided into k (or possibly a different number) of inner-test-folds.
+	- c) For each inner-test-fold:
+	  - i) The remaining inner-test-folds are combined and used to train all pipelines/models, which are scored on the corresponding inner-test-fold
+  - d) The winning model/pipeline of each inner-test-fold contest is chosen as that with the best median score over all inner-test-folds
+	  - iii) The user is alerted If there is a tie and expected to decide the winning pipeline (usually the simplest for better generalizability)
+- 4) The final winning model/pipeline is chosen as that with the most number of wins from all inner-test-fold contests corresponding to each outer-fold 
+	- e) Again, the user is expected to decide the winner If there is a tie
+- 5) This final winning model/pipeline is trained on all of the training data for each outer-fold, tested on the corresponding validation set, and summary statistics are presented to the user representing expected out-of-sample performance.
+
+
+### Installation
+##### Dependencies
+
+pyplearnr requires:
+
+Python (>= 2.7 or >= 3.3)
+scikit-learn (>= 0.18.2)
+numpy (>= 1.13.0)
+scipy (>= 0.19.1)
+pandas (>= 0.20.2)
+matplotlib (>= 2.0.2)
+
+For use in Jupyter notebooks and the conda installation, I recommend having nb_conda (>= 2.2.0).
+
+### User installation
+Install by using pip:
+
+```
+pip install pyplearnr
+```
+
+For conda, you can issue the same command above within a conda environment or you can include this in your environment.yml file:
+
+```
+- pip:
+    - pyplearnr
+```
+
+and then either generate a new environment from the terminal using:
+
+```
+conda env create
+```
+
+or update an existing one (environment_name) using:
+
+```
+conda env update -n=environment_name -f=./environment.yml
+```
+
+Another option is to simply clone the respository, link to the location in your code, and import it. 
+
 
